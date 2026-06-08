@@ -1,0 +1,33 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Git helpers
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+.venv/
+venv/
+env/
+
+# Unreal Engine workspace
+UE55_TTSHost/*.sln
+UE55_TTSHost/.gitkeep
+UE55_TTSHost/.vs/
+UE55_TTSHost/Binaries/
+UE55_TTSHost/DerivedDataCache/
+UE55_TTSHost/Intermediate/
+UE55_TTSHost/Saved/
+
+# Unreal plugin generated artifacts
+UE55_TTSHost/Plugins/LocalTTS/Binaries/
+UE55_TTSHost/Plugins/LocalTTS/Intermediate/
+
+# Service runtime folders
+Services/tts_service/cache/
+Services/tts_service/logs/
+Services/tts_service/models/
