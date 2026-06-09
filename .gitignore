@@ -22,12 +22,22 @@ UE55_TTSHost/Binaries/
 UE55_TTSHost/DerivedDataCache/
 UE55_TTSHost/Intermediate/
 UE55_TTSHost/Saved/
+UE56_TTSHost/*.sln
+UE56_TTSHost/.gitkeep
+UE56_TTSHost/.vs/
+UE56_TTSHost/Binaries/
+UE56_TTSHost/DerivedDataCache/
+UE56_TTSHost/Intermediate/
+UE56_TTSHost/Saved/
 
 # Unreal plugin generated artifacts
 UE55_TTSHost/Plugins/LocalTTS/Binaries/
 UE55_TTSHost/Plugins/LocalTTS/Intermediate/
+UE56_TTSHost/Plugins/LocalTTS/Binaries/
+UE56_TTSHost/Plugins/LocalTTS/Intermediate/
 
 # Service runtime folders
 Services/tts_service/cache/
 Services/tts_service/logs/
 Services/tts_service/models/
+Services/tts_service/vendor/

@@ -1,0 +1,6 @@
+fastapi>=0.136,<1.0
+uvicorn>=0.49,<1.0
+soundfile>=0.14,<1.0
+omnivoice==0.1.5
+torch>=2.11
+torchaudio>=2.11

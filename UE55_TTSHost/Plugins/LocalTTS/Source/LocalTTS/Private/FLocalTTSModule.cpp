@@ -1,6 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "LocalTTS.h"
+#include "FLocalTTSModule.h"
 
 #define LOCTEXT_NAMESPACE "FLocalTTSModule"
 
@@ -16,5 +16,5 @@ void FLocalTTSModule::ShutdownModule()
 }
 
 #undef LOCTEXT_NAMESPACE
-	
+
 IMPLEMENT_MODULE(FLocalTTSModule, LocalTTS)

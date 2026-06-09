@@ -1,0 +1,35 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UObject/Object.h"
+
+#include "ULocalTTSAudioPlayer.generated.h"
+
+class UAudioComponent;
+class USoundBase;
+
+UCLASS()
+class LOCALTTS_API ULocalTTSAudioPlayer : public UObject
+{
+	GENERATED_BODY()
+
+public:
+	bool PlaySound(
+		UObject* WorldContextObject,
+		USoundBase* Sound,
+		TFunction<void()>&& OnFinished,
+		FString& OutErrorMessage);
+
+	void Stop();
+	bool IsPlaying() const;
+
+private:
+	void HandleAudioFinished(UAudioComponent* FinishedComponent);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> ActiveAudioComponent;
+
+	TFunction<void()> OnPlaybackFinished;
+};
