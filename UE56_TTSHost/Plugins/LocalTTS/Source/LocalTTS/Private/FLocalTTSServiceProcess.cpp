@@ -30,14 +30,18 @@ bool FLocalTTSServiceProcess::StartService(FString& OutErrorMessage)
 	const FString PythonExecutablePath = GetPythonExecutablePath();
 	if (!FPaths::FileExists(PythonExecutablePath))
 	{
-		OutErrorMessage = FString::Printf(TEXT("Python executable not found: %s"), *PythonExecutablePath);
+		OutErrorMessage = FString::Printf(
+			TEXT("LocalTTS 未找到 Python 可执行文件：%s。请先运行 Setup_TTS_Service.bat，或检查 Project Settings > Plugins > LocalTTS > Python Relative Path。"),
+			*PythonExecutablePath);
 		return false;
 	}
 
 	const FString RunServerScriptPath = GetRunServerScriptPath();
 	if (!FPaths::FileExists(RunServerScriptPath))
 	{
-		OutErrorMessage = FString::Printf(TEXT("run_server.py not found: %s"), *RunServerScriptPath);
+		OutErrorMessage = FString::Printf(
+			TEXT("LocalTTS 未找到 run_server.py：%s。请检查 Project Settings > Plugins > LocalTTS > Service Relative Root 和 Run Server Script Name。"),
+			*RunServerScriptPath);
 		return false;
 	}
 
@@ -56,7 +60,7 @@ bool FLocalTTSServiceProcess::StartService(FString& OutErrorMessage)
 
 	if (!ProcessHandle.IsValid())
 	{
-		OutErrorMessage = TEXT("Failed to start LocalTTS service process.");
+		OutErrorMessage = TEXT("LocalTTS 启动服务进程失败。请确认 Python 环境已准备完成，并尝试手动运行 Services/tts_service/run_server.py 查看详情。");
 		return false;
 	}
 

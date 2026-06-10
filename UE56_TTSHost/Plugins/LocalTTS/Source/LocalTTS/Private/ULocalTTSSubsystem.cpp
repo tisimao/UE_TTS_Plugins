@@ -53,7 +53,7 @@ void ULocalTTSSubsystem::CheckHealth(
 {
 	if (!HttpClient.IsValid())
 	{
-		const FString ErrorMessage = TEXT("LocalTTS HTTP client is not initialized.");
+		const FString ErrorMessage = TEXT("LocalTTS HTTP 客户端尚未初始化。");
 		UpdateHealthFailure(ErrorMessage, ELocalTTSErrorCode::InternalError);
 		OnFailure(ErrorMessage);
 		return;
@@ -77,7 +77,7 @@ bool ULocalTTSSubsystem::StartService(FString& OutErrorMessage)
 {
 	if (!ServiceProcess.IsValid())
 	{
-		OutErrorMessage = TEXT("LocalTTS service process manager is not initialized.");
+		OutErrorMessage = TEXT("LocalTTS 服务进程管理器尚未初始化。");
 		ServiceState = ELocalTTSServiceState::Error;
 		LastHealthError = OutErrorMessage;
 		LastHealthErrorCode = ELocalTTSErrorCode::InternalError;
@@ -109,8 +109,8 @@ void ULocalTTSSubsystem::StopService()
 
 	StopSpeaking();
 
-	UpdateHealthFailure(TEXT("LocalTTS service stopped."), ELocalTTSErrorCode::None);
-	UpdateTTSFailure(TEXT("LocalTTS service stopped."), ELocalTTSErrorCode::None);
+	UpdateHealthFailure(TEXT("LocalTTS 服务已停止。"), ELocalTTSErrorCode::None);
+	UpdateTTSFailure(TEXT("LocalTTS 服务已停止。"), ELocalTTSErrorCode::None);
 	ServiceState = ELocalTTSServiceState::Stopped;
 }
 
@@ -127,9 +127,38 @@ void ULocalTTSSubsystem::StopSpeaking()
 	}
 }
 
+bool ULocalTTSSubsystem::PauseSpeaking(FString& OutErrorMessage)
+{
+	if (!AudioPlayer)
+	{
+		OutErrorMessage = TEXT("LocalTTS 音频播放器尚未初始化。");
+		UpdateTTSFailure(OutErrorMessage, ELocalTTSErrorCode::InternalError);
+		return false;
+	}
+
+	return AudioPlayer->Pause(OutErrorMessage);
+}
+
+bool ULocalTTSSubsystem::ResumeSpeaking(FString& OutErrorMessage)
+{
+	if (!AudioPlayer)
+	{
+		OutErrorMessage = TEXT("LocalTTS 音频播放器尚未初始化。");
+		UpdateTTSFailure(OutErrorMessage, ELocalTTSErrorCode::InternalError);
+		return false;
+	}
+
+	return AudioPlayer->Resume(OutErrorMessage);
+}
+
 bool ULocalTTSSubsystem::IsSpeaking() const
 {
 	return AudioPlayer && AudioPlayer->IsPlaying();
+}
+
+bool ULocalTTSSubsystem::IsSpeakingPaused() const
+{
+	return AudioPlayer && AudioPlayer->IsPaused();
 }
 
 bool ULocalTTSSubsystem::IsTTSRequestInFlight() const
@@ -139,7 +168,7 @@ bool ULocalTTSSubsystem::IsTTSRequestInFlight() const
 
 bool ULocalTTSSubsystem::IsBusy() const
 {
-	return IsTTSRequestInFlight() || IsSpeaking();
+	return IsTTSRequestInFlight() || IsSpeaking() || IsSpeakingPaused();
 }
 
 void ULocalTTSSubsystem::SpeakText(
@@ -149,7 +178,7 @@ void ULocalTTSSubsystem::SpeakText(
 {
 	if (bIsTTSRequestInFlight)
 	{
-		const FString ErrorMessage = TEXT("LocalTTS is already processing a speech request.");
+		const FString ErrorMessage = TEXT("LocalTTS 正在处理另一条语音请求。请等待 OnFinished，或先检查 Is Local TTS Busy 再发送新请求。");
 		LastTTSError = ErrorMessage;
 		LastTTSErrorCode = ELocalTTSErrorCode::AlreadyBusy;
 		ServiceState = ELocalTTSServiceState::Busy;
@@ -159,7 +188,7 @@ void ULocalTTSSubsystem::SpeakText(
 
 	if (!RequestValidator.IsValid())
 	{
-		const FString ErrorMessage = TEXT("LocalTTS request validator is not initialized.");
+		const FString ErrorMessage = TEXT("LocalTTS 请求校验器尚未初始化。");
 		UpdateTTSFailure(ErrorMessage, ELocalTTSErrorCode::InternalError);
 		OnFailure(ErrorMessage);
 		return;
@@ -175,7 +204,7 @@ void ULocalTTSSubsystem::SpeakText(
 
 	if (!HttpClient.IsValid())
 	{
-		const FString ErrorMessage = TEXT("LocalTTS HTTP client is not initialized.");
+		const FString ErrorMessage = TEXT("LocalTTS HTTP 客户端尚未初始化。");
 		UpdateTTSFailure(ErrorMessage, ELocalTTSErrorCode::InternalError);
 		OnFailure(ErrorMessage);
 		return;
@@ -224,7 +253,7 @@ void ULocalTTSSubsystem::PlaySpeech(
 {
 	if (!WavLoader.IsValid())
 	{
-		const FString ErrorMessage = TEXT("LocalTTS WAV loader is not initialized.");
+		const FString ErrorMessage = TEXT("LocalTTS WAV 加载器尚未初始化。");
 		UpdateTTSFailure(ErrorMessage, ELocalTTSErrorCode::InternalError);
 		OnFailure(ErrorMessage);
 		return;
@@ -232,7 +261,7 @@ void ULocalTTSSubsystem::PlaySpeech(
 
 	if (!AudioPlayer)
 	{
-		const FString ErrorMessage = TEXT("LocalTTS audio player is not initialized.");
+		const FString ErrorMessage = TEXT("LocalTTS 音频播放器尚未初始化。");
 		UpdateTTSFailure(ErrorMessage, ELocalTTSErrorCode::InternalError);
 		OnFailure(ErrorMessage);
 		return;
@@ -294,7 +323,7 @@ void ULocalTTSSubsystem::PlaySpeechAtActor(
 {
 	if (!WavLoader.IsValid())
 	{
-		const FString ErrorMessage = TEXT("LocalTTS WAV loader is not initialized.");
+		const FString ErrorMessage = TEXT("LocalTTS WAV 加载器尚未初始化。");
 		UpdateTTSFailure(ErrorMessage, ELocalTTSErrorCode::InternalError);
 		OnFailure(ErrorMessage);
 		return;
@@ -302,7 +331,7 @@ void ULocalTTSSubsystem::PlaySpeechAtActor(
 
 	if (!AudioPlayer)
 	{
-		const FString ErrorMessage = TEXT("LocalTTS audio player is not initialized.");
+		const FString ErrorMessage = TEXT("LocalTTS 音频播放器尚未初始化。");
 		UpdateTTSFailure(ErrorMessage, ELocalTTSErrorCode::InternalError);
 		OnFailure(ErrorMessage);
 		return;
@@ -384,17 +413,17 @@ FString ULocalTTSSubsystem::GetServiceStateText() const
 	switch (ServiceState)
 	{
 	case ELocalTTSServiceState::Stopped:
-		return TEXT("Stopped");
+		return TEXT("已停止");
 	case ELocalTTSServiceState::Starting:
-		return TEXT("Starting");
+		return TEXT("启动中");
 	case ELocalTTSServiceState::Ready:
-		return TEXT("Ready");
+		return TEXT("就绪");
 	case ELocalTTSServiceState::Busy:
-		return TEXT("Busy");
+		return TEXT("忙碌");
 	case ELocalTTSServiceState::Error:
-		return TEXT("Error");
+		return TEXT("错误");
 	default:
-		return TEXT("Unknown");
+		return TEXT("未知");
 	}
 }
 

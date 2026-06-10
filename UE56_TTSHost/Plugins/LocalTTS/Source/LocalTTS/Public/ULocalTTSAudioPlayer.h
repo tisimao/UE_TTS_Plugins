@@ -31,7 +31,10 @@ public:
 		FString& OutErrorMessage);
 
 	void Stop();
+	bool Pause(FString& OutErrorMessage);
+	bool Resume(FString& OutErrorMessage);
 	bool IsPlaying() const;
+	bool IsPaused() const;
 
 private:
 	void HandleAudioFinished(UAudioComponent* FinishedComponent);
@@ -40,4 +43,5 @@ private:
 	TObjectPtr<UAudioComponent> ActiveAudioComponent;
 
 	TFunction<void()> OnPlaybackFinished;
+	bool bIsPaused = false;
 };

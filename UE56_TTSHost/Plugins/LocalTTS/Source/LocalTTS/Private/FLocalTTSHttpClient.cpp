@@ -172,7 +172,9 @@ void FLocalTTSHttpClient::GetHealth(
 		{
 			if (!bWasSuccessful || !HttpResponse.IsValid())
 			{
-				OnFailure(ELocalTTSErrorCode::ServiceUnreachable, TEXT("LocalTTS service is unreachable."));
+				OnFailure(
+					ELocalTTSErrorCode::ServiceUnreachable,
+					TEXT("LocalTTS 无法访问 /health 接口。请先启动服务，或检查 Project Settings > Plugins > LocalTTS > Service Base URL。"));
 				return;
 			}
 
@@ -180,7 +182,7 @@ void FLocalTTSHttpClient::GetHealth(
 			if (!EHttpResponseCodes::IsOk(ResponseCode))
 			{
 				OnFailure(ELocalTTSErrorCode::HttpError, FString::Printf(
-					TEXT("LocalTTS health request failed. HTTP %d Body=%s"),
+					TEXT("LocalTTS /health 请求失败，HTTP 状态码：%d。响应内容：%s"),
 					ResponseCode,
 					*HttpResponse->GetContentAsString()));
 				return;
@@ -191,7 +193,7 @@ void FLocalTTSHttpClient::GetHealth(
 				HttpResponse->GetContentAsString(),
 				HealthResponse))
 			{
-				OnFailure(ELocalTTSErrorCode::ParseError, TEXT("Failed to parse LocalTTS health response."));
+				OnFailure(ELocalTTSErrorCode::ParseError, TEXT("LocalTTS 收到了无效的 /health 响应，无法完成解析。"));
 				return;
 			}
 
@@ -225,7 +227,9 @@ void FLocalTTSHttpClient::PostTTS(
 		{
 			if (!bWasSuccessful || !HttpResponse.IsValid())
 			{
-				OnFailure(ELocalTTSErrorCode::ServiceUnreachable, TEXT("LocalTTS speech request failed because the service is unreachable."));
+				OnFailure(
+					ELocalTTSErrorCode::ServiceUnreachable,
+					TEXT("LocalTTS 无法访问 /tts 接口。请先启动服务，或检查 Project Settings > Plugins > LocalTTS > Service Base URL。"));
 				return;
 			}
 
@@ -233,7 +237,7 @@ void FLocalTTSHttpClient::PostTTS(
 			if (!EHttpResponseCodes::IsOk(ResponseCode))
 			{
 				OnFailure(ELocalTTSErrorCode::HttpError, FString::Printf(
-					TEXT("LocalTTS speech request failed. HTTP %d Body=%s"),
+					TEXT("LocalTTS /tts 请求失败，HTTP 状态码：%d。响应内容：%s"),
 					ResponseCode,
 					*HttpResponse->GetContentAsString()));
 				return;
@@ -244,15 +248,15 @@ void FLocalTTSHttpClient::PostTTS(
 				HttpResponse->GetContentAsString(),
 				TTSResponse))
 			{
-				OnFailure(ELocalTTSErrorCode::ParseError, TEXT("Failed to parse LocalTTS speech response."));
+				OnFailure(ELocalTTSErrorCode::ParseError, TEXT("LocalTTS 收到了无效的 /tts 响应，无法完成解析。"));
 				return;
 			}
 
 			if (!TTSResponse.bOk)
 			{
 				const FString ErrorMessage = TTSResponse.ErrorMessage.IsEmpty()
-					? TEXT("LocalTTS returned an unknown error.")
-					: TTSResponse.ErrorMessage;
+					? TEXT("LocalTTS 服务端返回了未知错误。")
+					: FString::Printf(TEXT("LocalTTS 服务端返回错误：%s"), *TTSResponse.ErrorMessage);
 				OnFailure(ELocalTTSErrorCode::ServiceReturnedError, ErrorMessage);
 				return;
 			}

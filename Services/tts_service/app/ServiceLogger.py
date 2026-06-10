@@ -50,3 +50,10 @@ class ServiceLogger:
 
     def log_exception(self, request_id: str, ex: Exception) -> None:
         self.get_logger().exception("request failed request_id=%s error=%s", request_id, ex)
+
+    def log_cache_cleanup(self, removed_count: int, max_cache_wavs: int) -> None:
+        self.get_logger().info(
+            "cache cleanup removed_wavs=%s max_cache_wavs=%s",
+            removed_count,
+            max_cache_wavs,
+        )

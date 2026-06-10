@@ -61,6 +61,16 @@ class TTSService:
             audio, sample_rate = self._engine.generate(request)
             wav_path = self._cache_manager.build_wav_path(request_id)
             saved_path = self._cache_manager.save_audio(audio, sample_rate, wav_path)
+            max_cache_wavs = self._cache_manager.get_max_cache_wavs()
+            removed_paths = self._cache_manager.cleanup_old_wavs(
+                max_cache_wavs,
+                protected_paths=[saved_path],
+            )
+            if removed_paths:
+                self._service_logger.log_cache_cleanup(
+                    removed_count=len(removed_paths),
+                    max_cache_wavs=max_cache_wavs,
+                )
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             self._service_logger.log_request_finish(request_id, saved_path, duration_ms)
 

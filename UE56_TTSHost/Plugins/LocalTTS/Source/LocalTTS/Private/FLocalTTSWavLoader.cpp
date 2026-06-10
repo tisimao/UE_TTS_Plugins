@@ -13,13 +13,57 @@ namespace LocalTTSWavLoader
 	{
 		if (!FPaths::FileExists(WavPath))
 		{
-			OutErrorMessage = FString::Printf(TEXT("WAV file does not exist: %s"), *WavPath);
+			OutErrorMessage = FString::Printf(TEXT("WAV 文件不存在：%s"), *WavPath);
 			return false;
 		}
 
 		if (!FFileHelper::LoadFileToArray(OutBytes, *WavPath))
 		{
-			OutErrorMessage = FString::Printf(TEXT("Failed to read WAV file: %s"), *WavPath);
+			OutErrorMessage = FString::Printf(TEXT("读取 WAV 文件失败：%s"), *WavPath);
+			return false;
+		}
+
+		return true;
+	}
+
+	static bool ValidateWaveInfoForPlayback(
+		const FString& WavPath,
+		const FWaveModInfo& WaveInfo,
+		FString& OutErrorMessage)
+	{
+		if (!WaveInfo.SampleDataStart || WaveInfo.SampleDataSize <= 0)
+		{
+			OutErrorMessage = FString::Printf(TEXT("WAV 文件不包含有效采样数据：%s"), *WavPath);
+			return false;
+		}
+
+		if (!WaveInfo.pFormatTag || *WaveInfo.pFormatTag != FWaveModInfo::WAVE_INFO_FORMAT_PCM)
+		{
+			OutErrorMessage = FString::Printf(
+				TEXT("LocalTTS 播放不支持该 WAV 格式：%s。当前仅支持 16 位 PCM WAV。"),
+				*WavPath);
+			return false;
+		}
+
+		if (!WaveInfo.pBitsPerSample || *WaveInfo.pBitsPerSample != 16)
+		{
+			OutErrorMessage = FString::Printf(
+				TEXT("LocalTTS 播放不支持该 WAV 位深：%s。期望为 16 位 PCM 音频。"),
+				*WavPath);
+			return false;
+		}
+
+		if (!WaveInfo.pChannels || *WaveInfo.pChannels < 1 || *WaveInfo.pChannels > 2)
+		{
+			OutErrorMessage = FString::Printf(
+				TEXT("LocalTTS 播放不支持该声道数：%s。当前仅支持单声道或双声道 WAV。"),
+				*WavPath);
+			return false;
+		}
+
+		if (!WaveInfo.pSamplesPerSec || *WaveInfo.pSamplesPerSec <= 0)
+		{
+			OutErrorMessage = FString::Printf(TEXT("WAV 文件采样率无效：%s"), *WavPath);
 			return false;
 		}
 
@@ -38,17 +82,11 @@ bool FLocalTTSWavLoader::ValidateWavFile(const FString& WavPath, FString& OutErr
 	FWaveModInfo WaveInfo;
 	if (!WaveInfo.ReadWaveInfo(WavBytes.GetData(), WavBytes.Num()))
 	{
-		OutErrorMessage = FString::Printf(TEXT("Invalid WAV file: %s"), *WavPath);
+		OutErrorMessage = FString::Printf(TEXT("无效的 WAV 文件：%s"), *WavPath);
 		return false;
 	}
 
-	if (!WaveInfo.SampleDataStart || WaveInfo.SampleDataSize <= 0)
-	{
-		OutErrorMessage = FString::Printf(TEXT("WAV file contains no sample data: %s"), *WavPath);
-		return false;
-	}
-
-	return true;
+	return LocalTTSWavLoader::ValidateWaveInfoForPlayback(WavPath, WaveInfo, OutErrorMessage);
 }
 
 USoundWaveProcedural* FLocalTTSWavLoader::LoadSoundWave(
@@ -65,13 +103,14 @@ USoundWaveProcedural* FLocalTTSWavLoader::LoadSoundWave(
 	FWaveModInfo WaveInfo;
 	if (!WaveInfo.ReadWaveInfo(WavBytes.GetData(), WavBytes.Num()))
 	{
-		OutErrorMessage = FString::Printf(TEXT("Invalid WAV file: %s"), *WavPath);
+		OutErrorMessage = FString::Printf(TEXT("无效的 WAV 文件：%s"), *WavPath);
 		return nullptr;
 	}
 
-	if (!WaveInfo.SampleDataStart || WaveInfo.SampleDataSize <= 0)
+	// The runtime playback path currently targets the OmniVoice output we generate in this project:
+	// uncompressed 16-bit PCM WAV data loaded into a procedural sound wave.
+	if (!LocalTTSWavLoader::ValidateWaveInfoForPlayback(WavPath, WaveInfo, OutErrorMessage))
 	{
-		OutErrorMessage = FString::Printf(TEXT("WAV file contains no sample data: %s"), *WavPath);
 		return nullptr;
 	}
 
@@ -85,7 +124,7 @@ USoundWaveProcedural* FLocalTTSWavLoader::LoadSoundWave(
 	USoundWaveProcedural* SoundWave = NewObject<USoundWaveProcedural>(Outer ? Outer : GetTransientPackage());
 	if (!SoundWave)
 	{
-		OutErrorMessage = TEXT("Failed to allocate procedural sound wave.");
+		OutErrorMessage = TEXT("创建 Procedural SoundWave 失败。");
 		return nullptr;
 	}
 

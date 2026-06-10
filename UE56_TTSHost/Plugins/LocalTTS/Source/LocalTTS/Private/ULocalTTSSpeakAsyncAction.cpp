@@ -49,21 +49,21 @@ void ULocalTTSSpeakAsyncAction::Activate()
 	UObject* ContextObject = WorldContextObject.Get();
 	if (!ContextObject)
 	{
-		FinishWithFailure(TEXT("World context is invalid."));
+		FinishWithFailure(TEXT("LocalTTS 语音请求失败：World 上下文无效。"));
 		return;
 	}
 
 	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(ContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
 	if (!World)
 	{
-		FinishWithFailure(TEXT("Failed to resolve world for LocalTTS speak request."));
+		FinishWithFailure(TEXT("LocalTTS 语音请求失败：无法解析当前 World。"));
 		return;
 	}
 
 	UGameInstance* GameInstance = World->GetGameInstance();
 	if (!GameInstance)
 	{
-		FinishWithFailure(TEXT("Game instance is unavailable."));
+		FinishWithFailure(TEXT("LocalTTS 语音请求失败：GameInstance 不可用。"));
 		return;
 	}
 
@@ -72,12 +72,13 @@ void ULocalTTSSpeakAsyncAction::Activate()
 	ULocalTTSSubsystem* LocalSubsystem = GameInstance->GetSubsystem<ULocalTTSSubsystem>();
 	if (!LocalSubsystem)
 	{
-		FinishWithFailure(TEXT("LocalTTS subsystem is unavailable."));
+		FinishWithFailure(TEXT("LocalTTS 语音请求失败：LocalTTS 子系统不可用。"));
 		return;
 	}
 
 	Subsystem = LocalSubsystem;
 	OnStarted.Broadcast();
+	BroadcastStateChanged(ELocalTTSSpeakAsyncState::Started, TEXT("已进入 LocalTTS 语音流程。"));
 
 	TrySendRequest();
 }
@@ -86,7 +87,7 @@ void ULocalTTSSpeakAsyncAction::TrySendRequest()
 {
 	if (!Subsystem.IsValid())
 	{
-		FinishWithFailure(TEXT("LocalTTS subsystem is unavailable."));
+		FinishWithFailure(TEXT("LocalTTS 语音请求失败：LocalTTS 子系统不可用。"));
 		return;
 	}
 
@@ -101,6 +102,7 @@ void ULocalTTSSpeakAsyncAction::TrySendRequest()
 
 			if (Response.bOk && Response.Status.Equals(TEXT("ready"), ESearchCase::IgnoreCase))
 			{
+				WeakThis->BroadcastStateChanged(ELocalTTSSpeakAsyncState::Generating, TEXT("LocalTTS 服务已就绪，正在请求生成音频。"));
 				WeakThis->Subsystem->SpeakText(
 					WeakThis->SpeakRequest,
 					[WeakThis](const FLocalTTSTTSResponse& TTSResponse)
@@ -127,6 +129,7 @@ void ULocalTTSSpeakAsyncAction::TrySendRequest()
 				return;
 			}
 
+			WeakThis->BroadcastStateChanged(ELocalTTSSpeakAsyncState::WaitingForService, TEXT("LocalTTS 服务正在启动或等待模型加载。"));
 			WeakThis->BeginHealthPolling();
 		},
 		[WeakThis](const FString& ErrorMessage)
@@ -144,6 +147,7 @@ void ULocalTTSSpeakAsyncAction::TrySendRequest()
 				return;
 			}
 
+			WeakThis->BroadcastStateChanged(ELocalTTSSpeakAsyncState::WaitingForService, TEXT("LocalTTS 服务正在启动或等待模型加载。"));
 			WeakThis->BeginHealthPolling();
 		});
 }
@@ -156,7 +160,7 @@ void ULocalTTSSpeakAsyncAction::BeginHealthPolling()
 		: nullptr;
 	if (!World)
 	{
-		FinishWithFailure(TEXT("Failed to resolve world while waiting for LocalTTS service."));
+		FinishWithFailure(TEXT("LocalTTS 在等待服务就绪时无法解析当前 World。"));
 		return;
 	}
 
@@ -177,13 +181,13 @@ void ULocalTTSSpeakAsyncAction::PollServiceHealth()
 {
 	if (!Subsystem.IsValid())
 	{
-		FinishWithFailure(TEXT("LocalTTS subsystem is unavailable while waiting for service readiness."));
+		FinishWithFailure(TEXT("LocalTTS 在等待服务就绪时，LocalTTS 子系统已不可用。"));
 		return;
 	}
 
 	if (RemainingHealthPollCount <= 0)
 	{
-		FinishWithFailure(TEXT("Timed out while waiting for LocalTTS service to become ready."));
+		FinishWithFailure(TEXT("等待 LocalTTS 服务进入就绪状态超时。请检查服务控制台、Project Settings > Plugins > LocalTTS，以及是否已执行 Setup_TTS_Service.bat。"));
 		return;
 	}
 
@@ -212,6 +216,7 @@ void ULocalTTSSpeakAsyncAction::PollServiceHealth()
 				World->GetTimerManager().ClearTimer(WeakThis->HealthPollTimerHandle);
 			}
 
+			WeakThis->BroadcastStateChanged(ELocalTTSSpeakAsyncState::Generating, TEXT("LocalTTS 服务已就绪，正在请求生成音频。"));
 			WeakThis->Subsystem->SpeakText(
 				WeakThis->SpeakRequest,
 				[WeakThis](const FLocalTTSTTSResponse& TTSResponse)
@@ -241,15 +246,17 @@ void ULocalTTSSpeakAsyncAction::HandleSpeechResponse(const FLocalTTSTTSResponse&
 
 	if (!bAutoPlay)
 	{
+		BroadcastStateChanged(ELocalTTSSpeakAsyncState::AudioReady, TEXT("语音已生成完成，可用于自定义播放、数字人或后处理。"));
 		OnAudioReady.Broadcast(Response);
 		FinishWithSuccess(Response);
+		BroadcastStateChanged(ELocalTTSSpeakAsyncState::Finished, TEXT("仅生成流程已完成。"));
 		SetReadyToDestroy();
 		return;
 	}
 
 	if (!Subsystem.IsValid())
 	{
-		FinishWithFailure(TEXT("LocalTTS subsystem is unavailable during playback."));
+		FinishWithFailure(TEXT("LocalTTS 在准备播放时，LocalTTS 子系统已不可用。"));
 		return;
 	}
 
@@ -258,7 +265,9 @@ void ULocalTTSSpeakAsyncAction::HandleSpeechResponse(const FLocalTTSTTSResponse&
 	{
 		if (WeakThis.IsValid())
 		{
+			WeakThis->BroadcastStateChanged(ELocalTTSSpeakAsyncState::AudioReady, TEXT("音频已准备完成，即将开始播放。"));
 			WeakThis->OnAudioReady.Broadcast(Response);
+			WeakThis->BroadcastStateChanged(ELocalTTSSpeakAsyncState::Playing, TEXT("音频已开始播放。"));
 			WeakThis->FinishWithSuccess(Response);
 		}
 	};
@@ -301,8 +310,14 @@ void ULocalTTSSpeakAsyncAction::HandleSpeechResponse(const FLocalTTSTTSResponse&
 
 void ULocalTTSSpeakAsyncAction::HandlePlaybackFinished()
 {
+	BroadcastStateChanged(ELocalTTSSpeakAsyncState::Finished, TEXT("音频播放结束。"));
 	OnFinished.Broadcast();
 	SetReadyToDestroy();
+}
+
+void ULocalTTSSpeakAsyncAction::BroadcastStateChanged(const ELocalTTSSpeakAsyncState NewState, const FString& DetailMessage)
+{
+	OnStateChanged.Broadcast(NewState, DetailMessage);
 }
 
 void ULocalTTSSpeakAsyncAction::FinishWithFailure(const FString& ErrorMessage)
@@ -316,6 +331,7 @@ void ULocalTTSSpeakAsyncAction::FinishWithFailure(const FString& ErrorMessage)
 		World->GetTimerManager().ClearTimer(HealthPollTimerHandle);
 	}
 
+	BroadcastStateChanged(ELocalTTSSpeakAsyncState::Error, ErrorMessage);
 	OnError.Broadcast(ErrorMessage);
 	SetReadyToDestroy();
 }

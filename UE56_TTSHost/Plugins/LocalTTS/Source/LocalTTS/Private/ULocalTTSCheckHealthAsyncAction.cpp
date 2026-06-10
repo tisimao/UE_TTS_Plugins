@@ -19,21 +19,21 @@ void ULocalTTSCheckHealthAsyncAction::Activate()
 	UObject* ContextObject = WorldContextObject.Get();
 	if (!ContextObject)
 	{
-		FinishWithFailure(TEXT("World context is invalid."));
+		FinishWithFailure(TEXT("LocalTTS 健康检查失败：World 上下文无效。"));
 		return;
 	}
 
 	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(ContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
 	if (!World)
 	{
-		FinishWithFailure(TEXT("Failed to resolve world for LocalTTS health check."));
+		FinishWithFailure(TEXT("LocalTTS 健康检查失败：无法解析当前 World。"));
 		return;
 	}
 
 	UGameInstance* GameInstance = World->GetGameInstance();
 	if (!GameInstance)
 	{
-		FinishWithFailure(TEXT("Game instance is unavailable."));
+		FinishWithFailure(TEXT("LocalTTS 健康检查失败：GameInstance 不可用。"));
 		return;
 	}
 
@@ -42,7 +42,7 @@ void ULocalTTSCheckHealthAsyncAction::Activate()
 	ULocalTTSSubsystem* Subsystem = GameInstance->GetSubsystem<ULocalTTSSubsystem>();
 	if (!Subsystem)
 	{
-		FinishWithFailure(TEXT("LocalTTS subsystem is unavailable."));
+		FinishWithFailure(TEXT("LocalTTS 健康检查失败：LocalTTS 子系统不可用。"));
 		return;
 	}
 

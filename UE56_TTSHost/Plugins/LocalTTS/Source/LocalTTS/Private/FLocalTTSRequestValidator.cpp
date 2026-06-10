@@ -8,7 +8,7 @@ bool FLocalTTSRequestValidator::Validate(const FLocalTTSSpeakRequest& SpeakReque
 {
 	if (SpeakRequest.Text.TrimStartAndEnd().IsEmpty())
 	{
-		OutErrorMessage = TEXT("合成文本不能为空。请在 Text / 合成文本 中填写要朗读的内容。");
+		OutErrorMessage = TEXT("朗读请求中的 Text 为空。请填写希望 OmniVoice 朗读的文本。");
 		return false;
 	}
 
@@ -23,7 +23,7 @@ bool FLocalTTSRequestValidator::Validate(const FLocalTTSSpeakRequest& SpeakReque
 		if (NormalizedLanguageId != TEXT("zh") && NormalizedLanguageId != TEXT("en"))
 		{
 			OutErrorMessage = FString::Printf(
-				TEXT("不支持的 LanguageId：%s。当前支持 zh、en 或留空。"),
+				TEXT("不支持的 LanguageId：%s。请使用 zh、en，或直接留空。"),
 				*SpeakRequest.LanguageId);
 			return false;
 		}
@@ -31,19 +31,19 @@ bool FLocalTTSRequestValidator::Validate(const FLocalTTSSpeakRequest& SpeakReque
 
 	if (SpeakRequest.Speed <= 0.0f || SpeakRequest.Speed > 3.0f)
 	{
-		OutErrorMessage = TEXT("语速 Speed 必须大于 0 且小于等于 3。默认建议使用 1.0。");
+		OutErrorMessage = TEXT("Speed 必须大于 0 且小于等于 3.0，推荐默认值为 1.0。");
 		return false;
 	}
 
 	if (SpeakRequest.Duration < 0.0f)
 	{
-		OutErrorMessage = TEXT("目标时长 Duration 不能小于 0。0 表示让模型自己决定时长。");
+		OutErrorMessage = TEXT("Duration 不能为负数。填 0 表示交给 OmniVoice 自动决定语音时长。");
 		return false;
 	}
 
 	if (SpeakRequest.Duration > 60.0f)
 	{
-		OutErrorMessage = TEXT("目标时长 Duration 当前不能超过 60 秒。");
+		OutErrorMessage = TEXT("Duration 不能大于 60 秒。");
 		return false;
 	}
 
@@ -74,7 +74,7 @@ bool FLocalTTSRequestValidator::ValidateMode(const FLocalTTSSpeakRequest& SpeakR
 		return ValidateDesignMode(SpeakRequest, OutErrorMessage);
 	}
 
-	OutErrorMessage = FString::Printf(TEXT("不支持的生成模式：%s。当前支持 auto、design、clone。"), *SpeakRequest.Mode);
+	OutErrorMessage = FString::Printf(TEXT("不支持的 Mode：%s。可用值为 auto、design、clone。"), *SpeakRequest.Mode);
 	return false;
 }
 
@@ -84,27 +84,27 @@ bool FLocalTTSRequestValidator::ValidateCloneMode(
 {
 	if (SpeakRequest.ReferenceAudioPath.TrimStartAndEnd().IsEmpty())
 	{
-		OutErrorMessage = TEXT("clone 模式需要填写 ReferenceAudioPath / 参考音频路径。");
+		OutErrorMessage = TEXT("Clone 模式需要填写 ReferenceAudioPath，并指向一个已存在的本地 WAV 文件。");
 		return false;
 	}
 
 	const FString ReferenceAudioPath = SpeakRequest.ReferenceAudioPath.TrimStartAndEnd();
 	if (!FPaths::FileExists(ReferenceAudioPath))
 	{
-		OutErrorMessage = FString::Printf(TEXT("参考音频文件不存在：%s"), *ReferenceAudioPath);
+		OutErrorMessage = FString::Printf(TEXT("未找到参考音频文件：%s"), *ReferenceAudioPath);
 		return false;
 	}
 
 	const FString Extension = FPaths::GetExtension(ReferenceAudioPath).ToLower();
 	if (Extension != TEXT("wav"))
 	{
-		OutErrorMessage = TEXT("clone 模式当前要求参考音频为 wav 文件。");
+		OutErrorMessage = TEXT("Clone 模式当前要求参考音频必须是 WAV 文件。");
 		return false;
 	}
 
 	if (!SpeakRequest.ReferenceText.TrimStartAndEnd().IsEmpty() && SpeakRequest.ReferenceText.TrimStartAndEnd().Len() < 2)
 	{
-		OutErrorMessage = TEXT("ReferenceText / 参考音频文本过短。请填写参考音频里实际说的话，或留空让服务端 ASR 尝试识别。");
+		OutErrorMessage = TEXT("ReferenceText 太短。请填写参考音频中的朗读文本，或留空让服务尝试 ASR 识别。");
 		return false;
 	}
 
@@ -118,7 +118,7 @@ bool FLocalTTSRequestValidator::ValidateDesignMode(
 	const FString Instruct = SpeakRequest.Instruct.TrimStartAndEnd();
 	if (Instruct.IsEmpty())
 	{
-		OutErrorMessage = TEXT("design 模式需要填写 Instruct / 音色标签。示例：female, chinese accent 或 女，青年，中音调。");
+		OutErrorMessage = TEXT("Design 模式需要填写 Instruct 标签，例如：'female, chinese accent' 或 '女，青年，中音调'。");
 		return false;
 	}
 
@@ -133,13 +133,13 @@ bool FLocalTTSRequestValidator::ValidateDesignInstruct(
 	const FString ExpectedDelimiter = bUseChineseItems ? TEXT("，") : TEXT(", ");
 	if (!bUseChineseItems && Instruct.Contains(TEXT("，")))
 	{
-		OutErrorMessage = TEXT("英文 Instruct 标签请使用半角逗号加空格分隔，例如：female, chinese accent。");
+		OutErrorMessage = TEXT("英文 Instruct 标签必须使用英文逗号加空格分隔，例如：female, chinese accent。");
 		return false;
 	}
 
 	if (bUseChineseItems && Instruct.Contains(TEXT(",")))
 	{
-		OutErrorMessage = TEXT("中文 Instruct 标签请使用全角逗号分隔，例如：女，青年，中音调。");
+		OutErrorMessage = TEXT("中文 Instruct 标签必须使用全角逗号分隔，例如：女，青年，中音调。");
 		return false;
 	}
 
@@ -147,7 +147,7 @@ bool FLocalTTSRequestValidator::ValidateDesignInstruct(
 	Instruct.ParseIntoArray(Items, *ExpectedDelimiter, true);
 	if (Items.Num() == 0)
 	{
-		OutErrorMessage = TEXT("design 模式至少需要一个 OmniVoice 支持的 Instruct 标签。");
+		OutErrorMessage = TEXT("Design 模式至少需要一个受支持的 OmniVoice Instruct 标签。");
 		return false;
 	}
 
@@ -160,7 +160,7 @@ bool FLocalTTSRequestValidator::ValidateDesignInstruct(
 		if (!bSupported)
 		{
 			OutErrorMessage = FString::Printf(
-				TEXT("不支持的 Instruct 标签：%s。请只使用 OmniVoice 支持的标签，例如：female, chinese accent 或 女，青年，中音调。"),
+				TEXT("不支持的 Instruct 标签：%s。请只使用 OmniVoice 支持的标签，例如 'female, chinese accent' 或 '女，青年，中音调'。"),
 				*Item);
 			return false;
 		}

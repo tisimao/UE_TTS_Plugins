@@ -4,12 +4,66 @@
 
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "Misc/Paths.h"
 #include "TimerManager.h"
 
 #include "ULocalTTSSettings.h"
 #include "ULocalTTSSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogLocalTTSTestActor, Log, All);
+
+namespace LocalTTSTestActorText
+{
+	static FString ToYesNo(const bool bValue)
+	{
+		return bValue ? TEXT("是") : TEXT("否");
+	}
+
+	static FString ToReadableStatus(const FString& Status)
+	{
+		if (Status.Equals(TEXT("ready"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("就绪");
+		}
+
+		if (Status.Equals(TEXT("starting"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("启动中");
+		}
+
+		if (Status.Equals(TEXT("busy"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("忙碌");
+		}
+
+		if (Status.Equals(TEXT("stopped"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("已停止");
+		}
+
+		if (Status.Equals(TEXT("error"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("错误");
+		}
+
+		return Status.IsEmpty() ? TEXT("未知") : Status;
+	}
+
+	static const TCHAR* PlayModeOnlyMessage()
+	{
+		return TEXT("LocalTTS 示例 Actor 仅能在 Play 模式下使用。请先启动 PIE，让 GameInstance 和 LocalTTS 子系统创建完成。");
+	}
+
+	static const TCHAR* SubsystemUnavailableBeforeStartMessage()
+	{
+		return TEXT("在示例流程准备启动服务前，LocalTTS 子系统已不可用。");
+	}
+
+	static const TCHAR* BusyWaitingForGenerateMessage()
+	{
+		return TEXT("当前正在生成语音，请等待本次请求完成。生成完成后可直接播放最近一次生成的 WAV。");
+	}
+}
 
 ALocalTTSTestActor::ALocalTTSTestActor()
 {
@@ -55,7 +109,7 @@ void ALocalTTSTestActor::CheckLocalTTSHealth()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable. Run this actor in Play mode so a GameInstance exists."));
+		StoreError(LocalTTSTestActorText::PlayModeOnlyMessage());
 		return;
 	}
 
@@ -71,9 +125,9 @@ void ALocalTTSTestActor::CheckLocalTTSHealth()
 			WeakThis->LastHealthResponse = Response;
 			WeakThis->LastErrorMessage.Reset();
 			WeakThis->LastHealthSummary = FString::Printf(
-				TEXT("ok=%s status=%s model=%s"),
-				Response.bOk ? TEXT("true") : TEXT("false"),
-				*Response.Status,
+				TEXT("成功=%s 状态=%s 模型=%s"),
+				*LocalTTSTestActorText::ToYesNo(Response.bOk),
+				*LocalTTSTestActorText::ToReadableStatus(Response.Status),
 				*Response.Model);
 			UE_LOG(
 				LogLocalTTSTestActor,
@@ -97,7 +151,7 @@ void ALocalTTSTestActor::StartLocalTTSService()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable. Run this actor in Play mode so a GameInstance exists."));
+		StoreError(LocalTTSTestActorText::PlayModeOnlyMessage());
 		return;
 	}
 
@@ -117,7 +171,33 @@ void ALocalTTSTestActor::SpeakLocalTTSTest()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable. Run this actor in Play mode so a GameInstance exists."));
+		StoreError(LocalTTSTestActorText::PlayModeOnlyMessage());
+		return;
+	}
+
+	if (Subsystem->IsTTSRequestInFlight())
+	{
+		if (bGenerateOnlyRequestInFlight)
+		{
+			bPlayCachedSpeechAfterGenerate = true;
+			LastErrorMessage = TEXT("当前正在执行“仅生成示例 WAV”。生成完成后会自动播放这次生成的音频。");
+		}
+		else
+		{
+			LastErrorMessage = LocalTTSTestActorText::BusyWaitingForGenerateMessage();
+		}
+		return;
+	}
+
+	if (Subsystem->IsSpeaking())
+	{
+		LastErrorMessage = TEXT("当前已有音频正在播放。如需重新播放，请先点击“停止播放”。");
+		return;
+	}
+
+	if (HasPlayableGeneratedAudio())
+	{
+		PlayCachedSpeech();
 		return;
 	}
 
@@ -129,7 +209,7 @@ void ALocalTTSTestActor::GenerateLocalTTSTest()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable. Run this actor in Play mode so a GameInstance exists."));
+		StoreError(LocalTTSTestActorText::PlayModeOnlyMessage());
 		return;
 	}
 
@@ -141,7 +221,7 @@ void ALocalTTSTestActor::StopLocalTTSSpeaking()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable. Run this actor in Play mode so a GameInstance exists."));
+		StoreError(LocalTTSTestActorText::PlayModeOnlyMessage());
 		return;
 	}
 
@@ -167,6 +247,47 @@ ULocalTTSSubsystem* ALocalTTSTestActor::ResolveSubsystem() const
 	return GameInstance ? GameInstance->GetSubsystem<ULocalTTSSubsystem>() : nullptr;
 }
 
+bool ALocalTTSTestActor::HasPlayableGeneratedAudio() const
+{
+	return LastTTSResponse.bOk
+		&& !LastTTSResponse.WavPath.IsEmpty()
+		&& FPaths::FileExists(LastTTSResponse.WavPath);
+}
+
+void ALocalTTSTestActor::PlayCachedSpeech()
+{
+	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
+	if (!Subsystem)
+	{
+		StoreError(TEXT("在播放最近一次生成的音频前，LocalTTS 子系统已不可用。"));
+		return;
+	}
+
+	if (!HasPlayableGeneratedAudio())
+	{
+		StoreError(TEXT("当前没有可直接播放的已生成 WAV。请先点击“仅生成示例 WAV”，或直接点击“播放示例语音”重新生成并播放。"));
+		return;
+	}
+
+	LastErrorMessage = TEXT("正在播放最近一次生成的音频。");
+	Subsystem->PlaySpeech(
+		this,
+		LastTTSResponse,
+		[this]()
+		{
+			LastErrorMessage.Reset();
+			UE_LOG(LogLocalTTSTestActor, Log, TEXT("LocalTTS cached audio playback started."));
+		},
+		[this]()
+		{
+			UE_LOG(LogLocalTTSTestActor, Log, TEXT("LocalTTS cached audio playback finished."));
+		},
+		[this](const FString& ErrorMessage)
+		{
+			StoreError(ErrorMessage);
+		});
+}
+
 void ALocalTTSTestActor::ExecuteDeferredSpeak()
 {
 	BeginSpeakFlow();
@@ -177,7 +298,7 @@ void ALocalTTSTestActor::BeginSpeakFlow()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable. Run this actor in Play mode so a GameInstance exists."));
+		StoreError(LocalTTSTestActorText::PlayModeOnlyMessage());
 		return;
 	}
 
@@ -192,9 +313,9 @@ void ALocalTTSTestActor::BeginSpeakFlow()
 
 			WeakThis->LastHealthResponse = Response;
 			WeakThis->LastHealthSummary = FString::Printf(
-				TEXT("ok=%s status=%s model=%s"),
-				Response.bOk ? TEXT("true") : TEXT("false"),
-				*Response.Status,
+				TEXT("成功=%s 状态=%s 模型=%s"),
+				*LocalTTSTestActorText::ToYesNo(Response.bOk),
+				*LocalTTSTestActorText::ToReadableStatus(Response.Status),
 				*Response.Model);
 			if (Response.bOk && Response.Status.Equals(TEXT("ready"), ESearchCase::IgnoreCase))
 			{
@@ -206,7 +327,7 @@ void ALocalTTSTestActor::BeginSpeakFlow()
 			ULocalTTSSubsystem* Subsystem = WeakThis->ResolveSubsystem();
 			if (!Subsystem)
 			{
-				WeakThis->StoreError(TEXT("LocalTTS subsystem became unavailable before startup."));
+				WeakThis->StoreError(LocalTTSTestActorText::SubsystemUnavailableBeforeStartMessage());
 				return;
 			}
 
@@ -229,7 +350,7 @@ void ALocalTTSTestActor::BeginSpeakFlow()
 			ULocalTTSSubsystem* Subsystem = WeakThis->ResolveSubsystem();
 			if (!Subsystem)
 			{
-				WeakThis->StoreError(TEXT("LocalTTS subsystem became unavailable before startup."));
+				WeakThis->StoreError(LocalTTSTestActorText::SubsystemUnavailableBeforeStartMessage());
 				return;
 			}
 
@@ -248,7 +369,7 @@ void ALocalTTSTestActor::BeginGenerateFlow()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable. Run this actor in Play mode so a GameInstance exists."));
+		StoreError(TEXT("LocalTTS 子系统不可用。请在 Play 模式下运行该 Actor，确保 GameInstance 已创建。"));
 		return;
 	}
 
@@ -263,9 +384,9 @@ void ALocalTTSTestActor::BeginGenerateFlow()
 
 			WeakThis->LastHealthResponse = Response;
 			WeakThis->LastHealthSummary = FString::Printf(
-				TEXT("ok=%s status=%s model=%s"),
-				Response.bOk ? TEXT("true") : TEXT("false"),
-				*Response.Status,
+				TEXT("成功=%s 状态=%s 模型=%s"),
+				*LocalTTSTestActorText::ToYesNo(Response.bOk),
+				*LocalTTSTestActorText::ToReadableStatus(Response.Status),
 				*Response.Model);
 			if (Response.bOk && Response.Status.Equals(TEXT("ready"), ESearchCase::IgnoreCase))
 			{
@@ -277,7 +398,7 @@ void ALocalTTSTestActor::BeginGenerateFlow()
 			ULocalTTSSubsystem* Subsystem = WeakThis->ResolveSubsystem();
 			if (!Subsystem)
 			{
-				WeakThis->StoreError(TEXT("LocalTTS subsystem became unavailable before startup."));
+				WeakThis->StoreError(LocalTTSTestActorText::SubsystemUnavailableBeforeStartMessage());
 				return;
 			}
 
@@ -300,7 +421,7 @@ void ALocalTTSTestActor::BeginGenerateFlow()
 			ULocalTTSSubsystem* Subsystem = WeakThis->ResolveSubsystem();
 			if (!Subsystem)
 			{
-				WeakThis->StoreError(TEXT("LocalTTS subsystem became unavailable before startup."));
+				WeakThis->StoreError(LocalTTSTestActorText::SubsystemUnavailableBeforeStartMessage());
 				return;
 			}
 
@@ -319,7 +440,7 @@ void ALocalTTSTestActor::ExecuteSpeakRequest()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem became unavailable before speech request."));
+		StoreError(TEXT("在发送示例语音请求前，LocalTTS 子系统已不可用。"));
 		return;
 	}
 
@@ -333,11 +454,13 @@ void ALocalTTSTestActor::ExecuteSpeakRequest()
 				return;
 			}
 
+			WeakThis->bGenerateOnlyRequestInFlight = false;
+			WeakThis->bPlayCachedSpeechAfterGenerate = false;
 			WeakThis->LastTTSResponse = Response;
 			WeakThis->LastGeneratedWavPath = Response.WavPath;
 			WeakThis->LastTTSSummary = FString::Printf(
-				TEXT("ok=%s request_id=%s wav=%s duration_ms=%d"),
-				Response.bOk ? TEXT("true") : TEXT("false"),
+				TEXT("成功=%s 请求ID=%s WAV=%s 时长毫秒=%d"),
+				*LocalTTSTestActorText::ToYesNo(Response.bOk),
 				*Response.RequestId,
 				*Response.WavPath,
 				Response.DurationMs);
@@ -346,7 +469,7 @@ void ALocalTTSTestActor::ExecuteSpeakRequest()
 			ULocalTTSSubsystem* Subsystem = WeakThis->ResolveSubsystem();
 			if (!Subsystem)
 			{
-				WeakThis->StoreError(TEXT("LocalTTS subsystem became unavailable before playback."));
+				WeakThis->StoreError(TEXT("在开始示例播放前，LocalTTS 子系统已不可用。"));
 				return;
 			}
 
@@ -379,6 +502,8 @@ void ALocalTTSTestActor::ExecuteSpeakRequest()
 		{
 			if (WeakThis.IsValid())
 			{
+				WeakThis->bGenerateOnlyRequestInFlight = false;
+				WeakThis->bPlayCachedSpeechAfterGenerate = false;
 				WeakThis->StoreError(ErrorMessage);
 			}
 		});
@@ -389,9 +514,12 @@ void ALocalTTSTestActor::ExecuteGenerateRequest()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem became unavailable before speech generation."));
+		StoreError(TEXT("在发送示例生成请求前，LocalTTS 子系统已不可用。"));
 		return;
 	}
+
+	bGenerateOnlyRequestInFlight = true;
+	bPlayCachedSpeechAfterGenerate = false;
 
 	TWeakObjectPtr<ALocalTTSTestActor> WeakThis(this);
 	Subsystem->SpeakText(
@@ -403,17 +531,20 @@ void ALocalTTSTestActor::ExecuteGenerateRequest()
 				return;
 			}
 
+			const bool bShouldAutoPlayGeneratedAudio = WeakThis->bPlayCachedSpeechAfterGenerate;
+			WeakThis->bGenerateOnlyRequestInFlight = false;
+			WeakThis->bPlayCachedSpeechAfterGenerate = false;
 			WeakThis->LastTTSResponse = Response;
 			WeakThis->LastSpeechEvent = FLocalTTSSpeechEvent::FromRequestAndResponse(WeakThis->SpeakRequest, Response);
 			WeakThis->LastGeneratedWavPath = Response.WavPath;
 			WeakThis->LastTTSSummary = FString::Printf(
-				TEXT("ok=%s request_id=%s wav=%s duration_ms=%d"),
-				Response.bOk ? TEXT("true") : TEXT("false"),
+				TEXT("成功=%s 请求ID=%s WAV=%s 时长毫秒=%d"),
+				*LocalTTSTestActorText::ToYesNo(Response.bOk),
 				*Response.RequestId,
 				*Response.WavPath,
 				Response.DurationMs);
 			WeakThis->LastSpeechEventSummary = FString::Printf(
-				TEXT("request_id=%s text=%s wav=%s duration_sec=%.2f visemes=%d emotions=%d"),
+				TEXT("请求ID=%s 文本=%s WAV=%s 时长秒=%.2f 口型帧=%d 情绪帧=%d"),
 				*WeakThis->LastSpeechEvent.RequestId,
 				*WeakThis->LastSpeechEvent.Text,
 				*WeakThis->LastSpeechEvent.WavPath,
@@ -427,11 +558,18 @@ void ALocalTTSTestActor::ExecuteGenerateRequest()
 				TEXT("LocalTTS generated speech event request_id=%s wav=%s"),
 				*WeakThis->LastSpeechEvent.RequestId,
 				*WeakThis->LastSpeechEvent.WavPath);
+
+			if (bShouldAutoPlayGeneratedAudio)
+			{
+				WeakThis->PlayCachedSpeech();
+			}
 		},
 		[WeakThis](const FString& ErrorMessage)
 		{
 			if (WeakThis.IsValid())
 			{
+				WeakThis->bGenerateOnlyRequestInFlight = false;
+				WeakThis->bPlayCachedSpeechAfterGenerate = false;
 				WeakThis->StoreError(ErrorMessage);
 			}
 		});
@@ -442,7 +580,7 @@ void ALocalTTSTestActor::BeginHealthPolling()
 	UWorld* World = GetWorld();
 	if (!World)
 	{
-		StoreError(TEXT("Failed to resolve world while waiting for LocalTTS service."));
+		StoreError(TEXT("示例 Actor 在等待 LocalTTS 就绪时，无法解析当前 World。"));
 		return;
 	}
 
@@ -464,7 +602,7 @@ void ALocalTTSTestActor::PollServiceHealth()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable while waiting for service readiness."));
+		StoreError(TEXT("示例 Actor 在等待服务就绪时，LocalTTS 子系统已不可用。"));
 		return;
 	}
 
@@ -474,7 +612,7 @@ void ALocalTTSTestActor::PollServiceHealth()
 		{
 			World->GetTimerManager().ClearTimer(HealthPollTimerHandle);
 		}
-		StoreError(TEXT("Timed out while waiting for LocalTTS service to become ready."));
+		StoreError(TEXT("等待 LocalTTS 进入“就绪”状态超时。请检查服务控制台、Project Settings > Plugins > LocalTTS，以及是否已执行 Setup_TTS_Service.bat。"));
 		return;
 	}
 
@@ -491,9 +629,9 @@ void ALocalTTSTestActor::PollServiceHealth()
 
 			WeakThis->LastHealthResponse = Response;
 			WeakThis->LastHealthSummary = FString::Printf(
-				TEXT("ok=%s status=%s model=%s"),
-				Response.bOk ? TEXT("true") : TEXT("false"),
-				*Response.Status,
+				TEXT("成功=%s 状态=%s 模型=%s"),
+				*LocalTTSTestActorText::ToYesNo(Response.bOk),
+				*LocalTTSTestActorText::ToReadableStatus(Response.Status),
 				*Response.Model);
 			if (!Response.bOk || !Response.Status.Equals(TEXT("ready"), ESearchCase::IgnoreCase))
 			{
@@ -517,7 +655,7 @@ void ALocalTTSTestActor::BeginHealthPollingForGenerate()
 	UWorld* World = GetWorld();
 	if (!World)
 	{
-		StoreError(TEXT("Failed to resolve world while waiting for LocalTTS service."));
+		StoreError(TEXT("示例 Actor 在等待 LocalTTS 就绪时，无法解析当前 World。"));
 		return;
 	}
 
@@ -539,7 +677,7 @@ void ALocalTTSTestActor::PollServiceHealthForGenerate()
 	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
 	if (!Subsystem)
 	{
-		StoreError(TEXT("LocalTTS subsystem is unavailable while waiting for service readiness."));
+		StoreError(TEXT("示例 Actor 在等待服务就绪时，LocalTTS 子系统已不可用。"));
 		return;
 	}
 
@@ -549,7 +687,7 @@ void ALocalTTSTestActor::PollServiceHealthForGenerate()
 		{
 			World->GetTimerManager().ClearTimer(HealthPollTimerHandle);
 		}
-		StoreError(TEXT("Timed out while waiting for LocalTTS service to become ready."));
+		StoreError(TEXT("等待 LocalTTS 进入“就绪”状态超时。请检查服务控制台、Project Settings > Plugins > LocalTTS，以及是否已执行 Setup_TTS_Service.bat。"));
 		return;
 	}
 
@@ -566,9 +704,9 @@ void ALocalTTSTestActor::PollServiceHealthForGenerate()
 
 			WeakThis->LastHealthResponse = Response;
 			WeakThis->LastHealthSummary = FString::Printf(
-				TEXT("ok=%s status=%s model=%s"),
-				Response.bOk ? TEXT("true") : TEXT("false"),
-				*Response.Status,
+				TEXT("成功=%s 状态=%s 模型=%s"),
+				*LocalTTSTestActorText::ToYesNo(Response.bOk),
+				*LocalTTSTestActorText::ToReadableStatus(Response.Status),
 				*Response.Model);
 			if (!Response.bOk || !Response.Status.Equals(TEXT("ready"), ESearchCase::IgnoreCase))
 			{
@@ -595,6 +733,5 @@ void ALocalTTSTestActor::StoreError(const FString& ErrorMessage)
 	}
 
 	LastErrorMessage = ErrorMessage;
-	LastTTSSummary.Reset();
 	UE_LOG(LogLocalTTSTestActor, Error, TEXT("%s"), *ErrorMessage);
 }

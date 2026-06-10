@@ -17,13 +17,21 @@ class LOCALTTS_API ULocalTTSCheckHealthAsyncAction : public UBlueprintAsyncActio
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(BlueprintAssignable, Category = "LocalTTS|Health")
+	UPROPERTY(BlueprintAssignable, Category = "LocalTTS|Health", meta = (DisplayName = "检查成功", ToolTip = "成功拿到 /health 响应。可根据返回的 status 决定 UI 显示“就绪”还是“加载中”。"))
 	FLocalTTSHealthSuccessDelegate OnSuccess;
 
-	UPROPERTY(BlueprintAssignable, Category = "LocalTTS|Health")
+	UPROPERTY(BlueprintAssignable, Category = "LocalTTS|Health", meta = (DisplayName = "检查失败", ToolTip = "健康检查失败。通常用于提示服务未启动、端口不通或模型未正确加载。"))
 	FLocalTTSHealthFailureDelegate OnFailure;
 
-	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "检查 Local TTS 健康状态", ToolTip = "异步请求本地 OmniVoice 服务的 /health 接口，确认服务是否可访问、模型是否已经 ready。"), Category = "LocalTTS|Health")
+	UFUNCTION(
+		BlueprintCallable,
+		meta = (
+			BlueprintInternalUseOnly = "true",
+			WorldContext = "WorldContextObject",
+			DisplayName = "异步检查 Local TTS 健康",
+			ToolTip = "异步请求本地 OmniVoice 服务的 /health 接口，用于确认服务是否可访问、模型是否已就绪。"
+		),
+		Category = "LocalTTS|Health")
 	static ULocalTTSCheckHealthAsyncAction* CheckLocalTTSHealth(UObject* WorldContextObject);
 
 	virtual void Activate() override;

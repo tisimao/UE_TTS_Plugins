@@ -38,7 +38,10 @@ public:
 	bool StartService(FString& OutErrorMessage);
 	void StopService();
 	void StopSpeaking();
+	bool PauseSpeaking(FString& OutErrorMessage);
+	bool ResumeSpeaking(FString& OutErrorMessage);
 	bool IsSpeaking() const;
+	bool IsSpeakingPaused() const;
 	bool IsTTSRequestInFlight() const;
 	bool IsBusy() const;
 

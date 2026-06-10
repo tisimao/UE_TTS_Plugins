@@ -22,6 +22,7 @@ class AppConfig:
     cache_dir: Path
     log_dir: Path
     hf_cache_dir: Path | None
+    max_cache_wavs: int
     request_timeout_sec: float
     eager_load: bool
     load_asr: bool
@@ -44,6 +45,7 @@ class AppConfig:
             cache_dir=cache_dir,
             log_dir=log_dir,
             hf_cache_dir=hf_cache_dir,
+            max_cache_wavs=int(os.getenv("LOCAL_TTS_MAX_CACHE_WAVS", "50")),
             request_timeout_sec=float(os.getenv("LOCAL_TTS_REQUEST_TIMEOUT_SEC", "300")),
             eager_load=_env_flag("LOCAL_TTS_EAGER_LOAD", True),
             load_asr=_env_flag("LOCAL_TTS_LOAD_ASR", True),

@@ -28,29 +28,29 @@ UE 侧会把 `Mode`、`LanguageId` 自动 trim 并转小写，所以蓝图里填
 | `FLocalTTSSpeakRequest` | `Mode` | `auto` | 默认使用 OmniVoice auto 模式。 |
 | `FLocalTTSSpeakRequest` | `Duration` | `0` | 0 表示不发送 duration，让模型自己决定时长。 |
 | `FLocalTTSSpeakRequest` | `Speed` | `1.0` | 正常语速。 |
-| `MakeAutoSpeakRequest` / `创建 Auto 语音请求` | `LanguageId` | `zh` | 当输入为空时自动使用中文语言提示。 |
-| `MakeAutoSpeakRequest` / `创建 Auto 语音请求` | `Speed` | `1.0` | 当输入小于等于 0 时自动使用正常语速。 |
-| `MakeDesignSpeakRequest` / `创建 Design 语音请求` | `Mode` | `design` | 预设为 design 模式。 |
-| `MakeDesignSpeakRequest` / `创建 Design 语音请求` | `Instruct` | `female, chinese accent` | 当 Instruct 为空时使用官方支持的英文标签组合。 |
-| `MakeCloneSpeakRequest` / `创建 Clone 语音请求` | `Mode` | `clone` | 预设为 clone 模式，仍需要填写参考音频。 |
+| `Make Local TTS Auto Request` | `LanguageId` | `zh` | 当输入为空时自动使用中文语言提示。 |
+| `Make Local TTS Auto Request` | `Speed` | `1.0` | 当输入小于等于 0 时自动使用正常语速。 |
+| `Make Local TTS Design Request` | `Mode` | `design` | 预设为 design 模式。 |
+| `Make Local TTS Design Request` | `Instruct` | `female, chinese accent` | 当 Instruct 为空时使用官方支持的英文标签组合。 |
+| `Make Local TTS Clone Request` | `Mode` | `clone` | 预设为 clone 模式，仍需要填写参考音频。 |
 | `ULocalTTSSettings` | `ServiceBaseUrl` | `http://127.0.0.1:50021` | 本地 FastAPI 服务地址。 |
 | `ULocalTTSSettings` | `ServiceRelativeRoot` | `Services/tts_service` | 服务端代码相对仓库根目录的位置。 |
 | `ULocalTTSSettings` | `PythonRelativePath` | `.venv/Scripts/python.exe` | 服务目录内 Python 虚拟环境路径。 |
 | `ULocalTTSSettings` | `RunServerScriptName` | `run_server.py` | 服务启动脚本。 |
 | `ULocalTTSSettings` | `MaxHealthPollCount` | `30` | 最多轮询 30 次服务 ready 状态。 |
 | `ULocalTTSSettings` | `HealthPollIntervalSeconds` | `1.0` | 每 1 秒检查一次服务健康状态。 |
-| `SpeakTextAsync` / `生成并播放 Local TTS` | `bAutoPlay` | `true` | 生成 wav 后自动用 UE 2D 声音播放。 |
-| `SpeakTextAtActorAsync` / `在 Actor 位置播放 Local TTS` | `bAutoPlay` | `true` | 生成 wav 后自动播放。 |
-| `SpeakTextAtActorAsync` / `在 Actor 位置播放 Local TTS` | `bUseActorPlayback` | `true` | 使用指定 Actor 的位置进行 3D 播放。 |
-| `GenerateSpeechAsync` / `只生成 Local TTS` | `bAutoPlay` | `false` | 只生成 wav，不自动播放，适合数字人链路。 |
-| `ALocalTTSTestActor` | `Text` | `你好，这是一次 UE 本地语音测试。` | 测试 Actor 默认朗读文本。 |
-| `ALocalTTSTestActor` | `Mode` | `auto` | 测试 Actor 默认模式。 |
-| `ALocalTTSTestActor` | `LanguageId` | `zh` | 测试 Actor 默认语言。 |
-| `ALocalTTSTestActor` | `Speed` | `1.0` | 测试 Actor 默认语速。 |
-| `ALocalTTSTestActor` | `bCheckHealthOnBeginPlay` | `true` | PIE 开始时自动检查健康状态。 |
-| `ALocalTTSTestActor` | `bStartServiceOnBeginPlay` | `true` | PIE 开始时自动启动服务。 |
-| `ALocalTTSTestActor` | `bSpeakOnBeginPlay` | `true` | PIE 开始后自动朗读。 |
-| `ALocalTTSTestActor` | `AutoSpeakDelaySeconds` | `3.0` | 自动朗读前等待 3 秒。 |
+| `Speak Local TTS Async` | `bAutoPlay` | `true` | 生成 wav 后自动用 UE 2D 声音播放。 |
+| `Speak Local TTS At Actor Async` | `bAutoPlay` | `true` | 生成 wav 后自动播放。 |
+| `Speak Local TTS At Actor Async` | `bUseActorPlayback` | `true` | 使用指定 Actor 的位置进行 3D 播放。 |
+| `Generate Local TTS Async` | `bAutoPlay` | `false` | 只生成 wav，不自动播放，适合数字人链路。 |
+| `LocalTTS Example Actor` | `Text` | `你好，这是一次 UE 本地语音测试。` | 示例 Actor 默认朗读文本。 |
+| `LocalTTS Example Actor` | `Mode` | `auto` | 示例 Actor 默认模式。 |
+| `LocalTTS Example Actor` | `LanguageId` | `zh` | 示例 Actor 默认语言。 |
+| `LocalTTS Example Actor` | `Speed` | `1.0` | 示例 Actor 默认语速。 |
+| `LocalTTS Example Actor` | `bCheckHealthOnBeginPlay` | `true` | PIE 开始时自动检查健康状态。 |
+| `LocalTTS Example Actor` | `bStartServiceOnBeginPlay` | `true` | PIE 开始时自动启动服务。 |
+| `LocalTTS Example Actor` | `bSpeakOnBeginPlay` | `true` | PIE 开始后自动朗读。 |
+| `LocalTTS Example Actor` | `AutoSpeakDelaySeconds` | `3.0` | 自动朗读前等待 3 秒。 |
 
 ## 3. 服务端环境变量预设值
 
@@ -64,6 +64,7 @@ UE 侧会把 `Mode`、`LanguageId` 自动 trim 并转小写，所以蓝图里填
 | `LOCAL_TTS_DEVICE` | `cuda` | 推理设备。当前推荐 NVIDIA CUDA；如果机器没有 CUDA，可临时改成 `cpu`，但会明显变慢。 |
 | `LOCAL_TTS_DTYPE` | `float16` | 推理精度。CUDA 下默认 `float16` 更省显存；CPU 测试时如果报精度相关问题，可尝试 `float32`。 |
 | `LOCAL_TTS_CACHE_DIR` | `Services/tts_service/cache` | 生成 wav 的缓存目录。UE 收到的 `wav_path` 通常就在这里。 |
+| `LOCAL_TTS_MAX_CACHE_WAVS` | `50` | 最多保留多少个最近生成的 wav。超过上限时服务会自动删除更旧文件。 |
 | `LOCAL_TTS_LOG_DIR` | `Services/tts_service/logs` | 服务日志目录。HTTP 502 或模型推理失败时优先看这里。 |
 | `LOCAL_TTS_HF_CACHE_DIR` | 空 | Hugging Face 模型缓存目录。为空时使用默认缓存位置；想把大模型放到指定磁盘时再设置。 |
 | `LOCAL_TTS_REQUEST_TIMEOUT_SEC` | `300` | 单次 TTS 请求超时时间，单位秒。长文本或首次推理较慢时需要足够大。 |
