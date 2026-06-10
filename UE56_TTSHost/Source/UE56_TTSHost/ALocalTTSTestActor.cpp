@@ -15,7 +15,7 @@ ALocalTTSTestActor::ALocalTTSTestActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	SpeakRequest.Text = TEXT("Hello, this is a LocalTTS test in UE 5.6.");
+	SpeakRequest.Text = TEXT("你好，这是一次 UE 本地语音测试。");
 	SpeakRequest.Mode = TEXT("auto");
 	SpeakRequest.LanguageId = TEXT("zh");
 	SpeakRequest.Speed = 1.0f;

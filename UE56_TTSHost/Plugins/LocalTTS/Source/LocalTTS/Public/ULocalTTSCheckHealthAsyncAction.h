@@ -23,7 +23,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "LocalTTS|Health")
 	FLocalTTSHealthFailureDelegate OnFailure;
 
-	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "Check Local TTS Health Async", ToolTip = "Check whether the local OmniVoice service is reachable and ready."), Category = "LocalTTS|Health")
+	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "检查 Local TTS 健康状态", ToolTip = "异步请求本地 OmniVoice 服务的 /health 接口，确认服务是否可访问、模型是否已经 ready。"), Category = "LocalTTS|Health")
 	static ULocalTTSCheckHealthAsyncAction* CheckLocalTTSHealth(UObject* WorldContextObject);
 
 	virtual void Activate() override;

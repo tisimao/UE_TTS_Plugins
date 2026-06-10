@@ -16,4 +16,8 @@ private:
 	bool ValidateMode(const FLocalTTSSpeakRequest& SpeakRequest, FString& OutErrorMessage) const;
 	bool ValidateCloneMode(const FLocalTTSSpeakRequest& SpeakRequest, FString& OutErrorMessage) const;
 	bool ValidateDesignMode(const FLocalTTSSpeakRequest& SpeakRequest, FString& OutErrorMessage) const;
+	bool ValidateDesignInstruct(const FString& Instruct, FString& OutErrorMessage) const;
+	bool IsSupportedEnglishInstructItem(const FString& Item) const;
+	bool IsSupportedChineseInstructItem(const FString& Item) const;
+	bool ContainsNonAscii(const FString& Value) const;
 };

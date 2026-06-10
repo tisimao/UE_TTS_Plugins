@@ -43,13 +43,13 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "LocalTTS|Speech")
 	FLocalTTSSpeakFailureDelegate OnError;
 
-	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "Speak Local TTS Async", ToolTip = "Generate speech through the local OmniVoice service and play the returned wav in UE."), Category = "LocalTTS|Speech")
+	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "生成并播放 Local TTS", ToolTip = "调用本地 OmniVoice 服务生成 wav，并在 UE 中以 2D 声音播放。适合普通旁白、UI 语音和快速测试。"), Category = "LocalTTS|Speech")
 	static ULocalTTSSpeakAsyncAction* SpeakTextAsync(UObject* WorldContextObject, const FLocalTTSSpeakRequest& SpeakRequest);
 
-	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "Speak Local TTS At Actor Async", ToolTip = "Generate speech through the local OmniVoice service and play the returned wav at an actor location."), Category = "LocalTTS|Speech")
+	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "在 Actor 位置播放 Local TTS", ToolTip = "调用本地 OmniVoice 服务生成 wav，并绑定到指定 Actor 位置进行 3D 播放。适合场景角色、数字人或空间音频测试。"), Category = "LocalTTS|Speech")
 	static ULocalTTSSpeakAsyncAction* SpeakTextAtActorAsync(UObject* WorldContextObject, const FLocalTTSSpeakRequest& SpeakRequest, AActor* PlaybackActor);
 
-	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "Generate Local TTS Async", ToolTip = "Generate speech through the local OmniVoice service without playing it. Use the returned wav path for custom playback, lip sync, or digital human driving."), Category = "LocalTTS|Speech")
+	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject", DisplayName = "只生成 Local TTS", ToolTip = "只调用本地 OmniVoice 服务生成 wav，不自动播放。适合把 wav 路径交给自定义播放、口型分析或数字人表情驱动系统。"), Category = "LocalTTS|Speech")
 	static ULocalTTSSpeakAsyncAction* GenerateSpeechAsync(UObject* WorldContextObject, const FLocalTTSSpeakRequest& SpeakRequest);
 
 	virtual void Activate() override;

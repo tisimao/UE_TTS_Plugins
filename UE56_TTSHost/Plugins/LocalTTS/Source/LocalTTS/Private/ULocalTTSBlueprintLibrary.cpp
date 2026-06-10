@@ -46,7 +46,7 @@ FLocalTTSSpeakRequest ULocalTTSBlueprintLibrary::MakeDesignSpeakRequest(
 {
 	FLocalTTSSpeakRequest SpeakRequest = MakeAutoSpeakRequest(Text, LanguageId, Speed);
 	SpeakRequest.Mode = TEXT("design");
-	SpeakRequest.Instruct = Instruct.IsEmpty() ? TEXT("A warm, natural Chinese female voice.") : Instruct;
+	SpeakRequest.Instruct = Instruct.IsEmpty() ? TEXT("female, chinese accent") : Instruct;
 	return SpeakRequest;
 }
 

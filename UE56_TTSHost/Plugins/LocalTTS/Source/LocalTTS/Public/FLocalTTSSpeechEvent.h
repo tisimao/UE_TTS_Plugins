@@ -15,43 +15,43 @@ struct LOCALTTS_API FLocalTTSSpeechEvent
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "OK", ToolTip = "Whether the speech event was generated from a successful TTS response."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "是否成功", ToolTip = "该语音事件是否来自一次成功的 TTS 响应。"))
 	bool bOk = false;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "Request ID", ToolTip = "Service-side request id. Use this to match UE logs with service logs."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "请求 ID", ToolTip = "服务端请求编号，可用来对齐 UE 日志、服务端日志和生成的 wav 文件。"))
 	FString RequestId;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "Text", ToolTip = "Text used to generate this speech event."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "合成文本", ToolTip = "生成本次语音时使用的文本。数字人系统可用它做字幕、情绪分析或后续口型辅助。"))
 	FString Text;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "Mode", ToolTip = "OmniVoice mode used by this speech event."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "生成模式", ToolTip = "本次语音使用的 OmniVoice 模式，例如 auto、design 或 clone。"))
 	FString Mode;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "Language ID", ToolTip = "Language hint used by this speech event."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "语言 ID", ToolTip = "本次语音使用的语言提示，例如 zh 或 en。"))
 	FString LanguageId;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "WAV Path", ToolTip = "Generated wav file path on local disk. Digital human systems can analyze this file for lip sync."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "WAV 路径", ToolTip = "生成的 wav 文件路径。后续数字人口型、表情或自定义播放系统优先从这里读取音频。"))
 	FString WavPath;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "Sample Rate", ToolTip = "Generated audio sample rate."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "采样率", ToolTip = "生成音频的采样率。OmniVoice 当前通常为 24000。"))
 	int32 SampleRate = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "Duration MS", ToolTip = "Service-side synthesis duration in milliseconds."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "生成耗时毫秒", ToolTip = "服务端生成本次语音的耗时，单位为毫秒。注意这不是音频播放时长。"))
 	int32 DurationMs = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "Duration Seconds", ToolTip = "Speech duration in seconds when known."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent", meta = (DisplayName = "时长秒数", ToolTip = "语音时长秒数。当前优先根据服务端耗时或请求目标时长填充，后续可改为真实音频时长。"))
 	float DurationSeconds = 0.0f;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent|DigitalHuman", meta = (DisplayName = "Viseme Frames", ToolTip = "Reserved lip sync frames. Current OmniVoice path does not fill these yet."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent|DigitalHuman", meta = (DisplayName = "口型帧", ToolTip = "预留的口型帧数组。当前 OmniVoice 生成链路还不会填充，后续接 lip sync 分析器或 MetaHuman 驱动时使用。"))
 	TArray<FLocalTTSVisemeFrame> VisemeFrames;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent|DigitalHuman", meta = (DisplayName = "Emotion Frames", ToolTip = "Reserved expression frames. Current OmniVoice path does not fill these yet."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent|DigitalHuman", meta = (DisplayName = "表情帧", ToolTip = "预留的表情帧数组。当前 OmniVoice 生成链路还不会填充，后续接情绪分析或数字人表情驱动时使用。"))
 	TArray<FLocalTTSEmotionFrame> EmotionFrames;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent|Error", meta = (DisplayName = "Error Code", ToolTip = "Service-side error code when the request failed."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent|Error", meta = (DisplayName = "错误码", ToolTip = "语音事件对应的服务端错误码。"))
 	FString ErrorCode;
 
-	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent|Error", meta = (DisplayName = "Error Message", ToolTip = "Readable error message when the request failed."))
+	UPROPERTY(BlueprintReadOnly, Category = "LocalTTS|SpeechEvent|Error", meta = (DisplayName = "错误信息", ToolTip = "语音事件对应的服务端可读错误信息。"))
 	FString ErrorMessage;
 
 	static FLocalTTSSpeechEvent FromRequestAndResponse(

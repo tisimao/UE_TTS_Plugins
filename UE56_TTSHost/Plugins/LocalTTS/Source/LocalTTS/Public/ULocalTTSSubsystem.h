@@ -62,34 +62,34 @@ public:
 		TFunction<void()>&& OnFinished,
 		TFunction<void(const FString&)>&& OnFailure);
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取服务地址", ToolTip = "读取插件当前使用的本地 TTS 服务地址。默认来自项目设置： http://127.0.0.1:50021。"))
 	FString GetServiceBaseUrl() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "服务是否就绪", ToolTip = "当最近一次 /health 返回 ok=true 且 status=ready 时为 true。首次加载 OmniVoice 模型时通常会先是 false。"))
 	bool IsServiceReady() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取服务状态", ToolTip = "读取插件内部服务状态。默认初始值为已停止，启动后会在启动中、已就绪、忙碌中、错误之间切换。"))
 	ELocalTTSServiceState GetServiceState() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取服务状态文本", ToolTip = "读取服务状态的可读文本，适合直接显示到调试 UI 或 Details 面板中。"))
 	FString GetServiceStateText() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取最近健康响应", ToolTip = "读取最近一次成功解析的 /health 响应。默认是空响应；点击 Health、Speak 或 Gen 后会更新。"))
 	FLocalTTSHealthResponse GetLastHealthResponse() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取最近健康错误", ToolTip = "读取最近一次健康检查失败时的错误信息。默认为空；服务未启动、端口不通或模型加载失败时会写入。"))
 	FString GetLastHealthError() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取最近健康错误码", ToolTip = "读取最近一次健康检查失败时的错误码。默认无错误；可在蓝图中按错误类型分支处理。"))
 	ELocalTTSErrorCode GetLastHealthErrorCode() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取最近语音响应", ToolTip = "读取最近一次 /tts 响应。成功时包含 request_id、wav 路径、采样率和生成耗时；默认是空响应。"))
 	FLocalTTSTTSResponse GetLastTTSResponse() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取最近语音错误", ToolTip = "读取最近一次语音生成、WAV 加载或播放失败时的错误信息。默认为空。"))
 	FString GetLastTTSError() const;
 
-	UFUNCTION(BlueprintPure, Category = "LocalTTS")
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取最近语音错误码", ToolTip = "读取最近一次语音流程失败时的错误码。默认无错误；可用于 UI 提示或自动重试逻辑。"))
 	ELocalTTSErrorCode GetLastTTSErrorCode() const;
 
 private:

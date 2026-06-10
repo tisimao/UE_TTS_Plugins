@@ -8,16 +8,16 @@
 UENUM(BlueprintType)
 enum class ELocalTTSErrorCode : uint8
 {
-	None UMETA(DisplayName = "None"),
-	InternalError UMETA(DisplayName = "Internal Error"),
-	ServiceProcessError UMETA(DisplayName = "Service Process Error"),
-	ServiceUnreachable UMETA(DisplayName = "Service Unreachable"),
-	HttpError UMETA(DisplayName = "HTTP Error"),
-	ParseError UMETA(DisplayName = "Parse Error"),
-	RequestValidationFailed UMETA(DisplayName = "Request Validation Failed"),
-	ServiceReturnedError UMETA(DisplayName = "Service Returned Error"),
-	AlreadyBusy UMETA(DisplayName = "Already Busy"),
-	WavFileInvalid UMETA(DisplayName = "WAV File Invalid"),
-	WavLoadFailed UMETA(DisplayName = "WAV Load Failed"),
-	PlaybackFailed UMETA(DisplayName = "Playback Failed")
+	None UMETA(DisplayName = "无错误"),
+	InternalError UMETA(DisplayName = "插件内部错误"),
+	ServiceProcessError UMETA(DisplayName = "服务进程错误"),
+	ServiceUnreachable UMETA(DisplayName = "服务不可访问"),
+	HttpError UMETA(DisplayName = "HTTP 请求错误"),
+	ParseError UMETA(DisplayName = "响应解析错误"),
+	RequestValidationFailed UMETA(DisplayName = "请求参数校验失败"),
+	ServiceReturnedError UMETA(DisplayName = "服务返回错误"),
+	AlreadyBusy UMETA(DisplayName = "已有请求进行中"),
+	WavFileInvalid UMETA(DisplayName = "WAV 文件无效"),
+	WavLoadFailed UMETA(DisplayName = "WAV 加载失败"),
+	PlaybackFailed UMETA(DisplayName = "播放失败")
 };
