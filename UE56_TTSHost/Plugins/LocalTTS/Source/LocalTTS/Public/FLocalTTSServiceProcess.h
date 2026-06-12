@@ -18,8 +18,10 @@ public:
 
 private:
 	FString GetRepoRoot() const;
+	FString GetRunServerScriptName() const;
 	FString GetPythonExecutablePath() const;
 	FString GetRunServerScriptPath() const;
+	void SetServiceEnvironment(const FString& ServiceRoot) const;
 
 	FProcHandle ProcessHandle;
 };

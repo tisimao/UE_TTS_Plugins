@@ -96,15 +96,27 @@ private:
 	UFUNCTION()
 	void HandleActiveActionSucceeded(const FLocalTTSTTSResponse& Response);
 
+	UFUNCTION()
+	void HandlePrefetchActionSpeechEventReady(const FLocalTTSSpeechEvent& SpeechEvent);
+
+	UFUNCTION()
+	void HandlePrefetchActionError(const FString& ErrorMessage);
+
+	UFUNCTION()
+	void HandlePrefetchActionSucceeded(const FLocalTTSTTSResponse& Response);
+
 	bool StartQueueInternal(UObject* WorldContextObject, const FLocalTTSLongTextRequest& LongTextRequest, bool bInAutoPlay, FString& ErrorMessage);
 	void AdvanceQueue();
 	void StartCurrentSegment();
-	void CompleteCurrentSegment();
+	void CompleteCurrentSegment(bool bAdvanceQueue = true);
 	void FailCurrentSegment(const FString& ErrorMessage);
 	void ClearActiveAction();
+	void ClearPrefetchAction();
 	void SetQueueState(ELocalTTSLongTextQueueState NewState, const FString& DetailMessage);
 	TArray<FLocalTTSTextSegment> BuildSegments(const FLocalTTSLongTextRequest& LongTextRequest) const;
 	void PlayCurrentGeneratedSegment();
+	bool StartPrefetchForSegment(int32 SegmentIndex, FString& ErrorMessage);
+	bool HasPrefetchedSegment(int32 SegmentIndex) const;
 	class ULocalTTSSubsystem* ResolveSubsystem() const;
 
 	TWeakObjectPtr<UObject> QueueWorldContextObject;
@@ -117,10 +129,17 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ULocalTTSSpeakAsyncAction> ActiveAction = nullptr;
 
+	UPROPERTY(Transient)
+	TObjectPtr<ULocalTTSSpeakAsyncAction> PrefetchAction = nullptr;
+
 	ELocalTTSLongTextQueueState QueueState = ELocalTTSLongTextQueueState::Idle;
 	int32 CurrentSegmentIndex = INDEX_NONE;
+	int32 PrefetchedSegmentIndex = INDEX_NONE;
+	FLocalTTSSegmentSpeechEvent PrefetchedSegmentSpeechEvent;
+	FLocalTTSTTSResponse PrefetchedSegmentTTSResponse;
 	bool bAutoPlaySegments = true;
 	bool bStopRequested = false;
 	bool bPauseRequested = false;
 	bool bSkipRequested = false;
+	bool bPlayPrefetchedSegmentWhenReady = false;
 };

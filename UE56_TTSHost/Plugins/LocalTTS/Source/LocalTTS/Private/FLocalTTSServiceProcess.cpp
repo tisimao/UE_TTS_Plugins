@@ -2,7 +2,10 @@
 
 #include "FLocalTTSServiceProcess.h"
 
+#include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/PlatformMisc.h"
+#include "Misc/App.h"
 #include "Misc/Paths.h"
 #include "ULocalTTSSettings.h"
 
@@ -46,6 +49,7 @@ bool FLocalTTSServiceProcess::StartService(FString& OutErrorMessage)
 	}
 
 	const FString ServiceRoot = GetServiceRoot();
+	SetServiceEnvironment(ServiceRoot);
 	const FString Arguments = TEXT("run_server.py");
 	ProcessHandle = FPlatformProcess::CreateProc(
 		*PythonExecutablePath,
@@ -86,8 +90,25 @@ FString FLocalTTSServiceProcess::GetServiceRoot() const
 		? Settings->ServiceRelativeRoot
 		: TEXT("Services/tts_service");
 
-	return FPaths::ConvertRelativePathToFull(
-		FPaths::Combine(GetRepoRoot(), RelativeRoot));
+	TArray<FString> CandidateRoots;
+	CandidateRoots.Add(FPaths::Combine(GetRepoRoot(), RelativeRoot));
+	CandidateRoots.Add(FPaths::Combine(FPaths::ProjectDir(), RelativeRoot));
+	CandidateRoots.Add(FPaths::Combine(FPlatformProcess::BaseDir(), RelativeRoot));
+	CandidateRoots.Add(FPaths::Combine(FPlatformProcess::BaseDir(), TEXT(".."), RelativeRoot));
+	CandidateRoots.Add(FPaths::Combine(FPlatformProcess::BaseDir(), TEXT(".."), TEXT(".."), RelativeRoot));
+	CandidateRoots.Add(FPaths::Combine(FPlatformProcess::BaseDir(), TEXT(".."), TEXT(".."), TEXT(".."), RelativeRoot));
+
+	const FString ScriptName = GetRunServerScriptName();
+	for (const FString& CandidateRoot : CandidateRoots)
+	{
+		const FString FullCandidateRoot = FPaths::ConvertRelativePathToFull(CandidateRoot);
+		if (FPaths::FileExists(FPaths::Combine(FullCandidateRoot, ScriptName)))
+		{
+			return FullCandidateRoot;
+		}
+	}
+
+	return FPaths::ConvertRelativePathToFull(CandidateRoots[0]);
 }
 
 FString FLocalTTSServiceProcess::GetRepoRoot() const
@@ -104,11 +125,32 @@ FString FLocalTTSServiceProcess::GetPythonExecutablePath() const
 	return FPaths::Combine(GetServiceRoot(), RelativePath);
 }
 
-FString FLocalTTSServiceProcess::GetRunServerScriptPath() const
+FString FLocalTTSServiceProcess::GetRunServerScriptName() const
 {
 	const ULocalTTSSettings* Settings = GetDefault<ULocalTTSSettings>();
-	const FString ScriptName = Settings
+	return Settings
 		? Settings->RunServerScriptName
 		: TEXT("run_server.py");
-	return FPaths::Combine(GetServiceRoot(), ScriptName);
+}
+
+FString FLocalTTSServiceProcess::GetRunServerScriptPath() const
+{
+	return FPaths::Combine(GetServiceRoot(), GetRunServerScriptName());
+}
+
+void FLocalTTSServiceProcess::SetServiceEnvironment(const FString& ServiceRoot) const
+{
+	const FString ModelCacheDir = FPaths::Combine(ServiceRoot, TEXT("models"), TEXT("huggingface"));
+	if (FPaths::DirectoryExists(ModelCacheDir))
+	{
+		FPlatformMisc::SetEnvironmentVar(TEXT("LOCAL_TTS_HF_CACHE_DIR"), *ModelCacheDir);
+	}
+
+	const FString WritableRoot = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LocalTTS"));
+	const FString CacheDir = FPaths::Combine(WritableRoot, TEXT("cache"));
+	const FString LogDir = FPaths::Combine(WritableRoot, TEXT("logs"));
+	IFileManager::Get().MakeDirectory(*CacheDir, true);
+	IFileManager::Get().MakeDirectory(*LogDir, true);
+	FPlatformMisc::SetEnvironmentVar(TEXT("LOCAL_TTS_CACHE_DIR"), *CacheDir);
+	FPlatformMisc::SetEnvironmentVar(TEXT("LOCAL_TTS_LOG_DIR"), *LogDir);
 }

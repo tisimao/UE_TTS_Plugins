@@ -7,6 +7,7 @@
 
 #include "ULocalTTSBlueprintLibrary.h"
 #include "ULocalTTSLongTextQueue.h"
+#include "ULocalTTSSettings.h"
 #include "ULocalTTSSpeakAsyncAction.h"
 #include "ULocalTTSSubsystem.h"
 
@@ -91,6 +92,7 @@ bool ALocalTTSDemoController::StartService(FString& ErrorMessage)
 	ClearError();
 	ServiceStateText = Subsystem->GetServiceStateText();
 	AppendEventLog(TEXT("已发送服务启动请求，等待健康检查确认模型就绪。"));
+	BeginServiceReadinessPolling();
 	BroadcastStateUpdated();
 	return true;
 }
@@ -133,6 +135,11 @@ bool ALocalTTSDemoController::CheckHealth(FString& ErrorMessage)
 				*LocalTTSDemoControllerText::ToYesNo(Response.bOk),
 				*Response.Status,
 				*Response.Model));
+			if (Response.bOk && Response.Status.Equals(TEXT("ready"), ESearchCase::IgnoreCase))
+			{
+				WeakThis->StopServiceReadinessPolling();
+				WeakThis->AppendEventLog(TEXT("LocalTTS 服务已就绪，可以开始生成语音。"));
+			}
 			WeakThis->BroadcastStateUpdated();
 		},
 		[WeakThis](const FString& FailureMessage)
@@ -399,6 +406,12 @@ void ALocalTTSDemoController::HandleSingleSpeechEventReady(const FLocalTTSSpeech
 
 void ALocalTTSDemoController::HandleSingleFinished()
 {
+	if (ULocalTTSSubsystem* Subsystem = ResolveSubsystem())
+	{
+		Subsystem->StopSpeaking();
+		ServiceStateText = Subsystem->GetServiceStateText();
+	}
+
 	UpdateSingleState(ELocalTTSSpeakAsyncState::Finished, TEXT("单句语音流程已完成。"));
 	ClearActiveSingleAction();
 	AppendEventLog(TEXT("单句流程结束。"));
@@ -568,13 +581,6 @@ bool ALocalTTSDemoController::StartSingleInternal(const FString& Text, const boo
 		return false;
 	}
 
-	if (Subsystem->IsBusy())
-	{
-		ErrorMessage = TEXT("LocalTTS 正在处理上一条语音或正在播放中，请稍后再试。");
-		StoreError(ErrorMessage);
-		return false;
-	}
-
 	if (!ULocalTTSBlueprintLibrary::ValidateSpeakRequest(Request, ErrorMessage))
 	{
 		StoreError(ErrorMessage);
@@ -652,6 +658,119 @@ bool ALocalTTSDemoController::StartLongTextInternal(const FString& Text, const b
 	AppendEventLog(bAutoPlay ? TEXT("长文本生成并播放请求已提交。") : TEXT("长文本仅生成请求已提交。"));
 	BroadcastStateUpdated();
 	return true;
+}
+
+void ALocalTTSDemoController::BeginServiceReadinessPolling()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		StoreError(TEXT("启动服务后无法解析当前 World，不能自动检查健康状态。"));
+		return;
+	}
+
+	const ULocalTTSSettings* Settings = GetDefault<ULocalTTSSettings>();
+	const int32 MaxHealthPollCount = Settings ? Settings->MaxHealthPollCount : 30;
+	const float HealthPollIntervalSeconds = Settings ? Settings->HealthPollIntervalSeconds : 1.0f;
+
+	RemainingServiceReadinessPollCount = FMath::Max(1, MaxHealthPollCount);
+	World->GetTimerManager().ClearTimer(ServiceReadinessTimerHandle);
+	World->GetTimerManager().SetTimer(
+		ServiceReadinessTimerHandle,
+		this,
+		&ALocalTTSDemoController::PollServiceReadiness,
+		FMath::Max(0.1f, HealthPollIntervalSeconds),
+		true,
+		0.1f);
+}
+
+void ALocalTTSDemoController::PollServiceReadiness()
+{
+	if (bServiceReadinessCheckInFlight)
+	{
+		return;
+	}
+
+	ULocalTTSSubsystem* Subsystem = ResolveSubsystem();
+	if (!Subsystem)
+	{
+		StopServiceReadinessPolling();
+		StoreError(TEXT("启动服务后自动检查健康状态时，LocalTTS 子系统已不可用。"));
+		return;
+	}
+
+	if (RemainingServiceReadinessPollCount <= 0)
+	{
+		StopServiceReadinessPolling();
+		if (!Subsystem->IsServiceReady())
+		{
+			StoreError(TEXT("等待 LocalTTS 服务进入就绪状态超时。请检查服务控制台、Project Settings > Plugins > LocalTTS，以及是否已执行 Setup_TTS_Service.bat。"));
+		}
+		return;
+	}
+
+	--RemainingServiceReadinessPollCount;
+	bServiceReadinessCheckInFlight = true;
+	ServiceStateText = TEXT("健康检查中...");
+	BroadcastStateUpdated();
+
+	TWeakObjectPtr<ALocalTTSDemoController> WeakThis(this);
+	Subsystem->CheckHealth(
+		[WeakThis](const FLocalTTSHealthResponse& Response)
+		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
+			WeakThis->bServiceReadinessCheckInFlight = false;
+			WeakThis->LastHealthResponse = Response;
+			if (ULocalTTSSubsystem* CurrentSubsystem = WeakThis->ResolveSubsystem())
+			{
+				WeakThis->ServiceStateText = CurrentSubsystem->GetServiceStateText();
+			}
+
+			WeakThis->AppendEventLog(FString::Printf(
+				TEXT("自动健康检查：成功=%s，状态=%s，模型=%s。"),
+				*LocalTTSDemoControllerText::ToYesNo(Response.bOk),
+				*Response.Status,
+				*Response.Model));
+
+			if (Response.bOk && Response.Status.Equals(TEXT("ready"), ESearchCase::IgnoreCase))
+			{
+				WeakThis->ClearError();
+				WeakThis->StopServiceReadinessPolling();
+				WeakThis->AppendEventLog(TEXT("LocalTTS 服务已就绪，可以开始生成语音。"));
+			}
+
+			WeakThis->BroadcastStateUpdated();
+		},
+		[WeakThis](const FString& FailureMessage)
+		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
+			WeakThis->bServiceReadinessCheckInFlight = false;
+			if (ULocalTTSSubsystem* CurrentSubsystem = WeakThis->ResolveSubsystem())
+			{
+				WeakThis->ServiceStateText = CurrentSubsystem->GetServiceStateText();
+			}
+
+			WeakThis->AppendEventLog(FString::Printf(TEXT("自动健康检查暂未就绪：%s"), *FailureMessage));
+			WeakThis->BroadcastStateUpdated();
+		});
+}
+
+void ALocalTTSDemoController::StopServiceReadinessPolling()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ServiceReadinessTimerHandle);
+	}
+	RemainingServiceReadinessPollCount = 0;
+	bServiceReadinessCheckInFlight = false;
 }
 
 void ALocalTTSDemoController::BindLongTextQueueCallbacks()

@@ -290,7 +290,7 @@ void ULocalTTSSubsystem::PlaySpeech(
 		SoundWave,
 		[this, OnFinished = MoveTemp(OnFinished)]() mutable
 		{
-			ServiceState = IsServiceReady() ? ELocalTTSServiceState::Ready : ELocalTTSServiceState::Starting;
+			HandlePlaybackFinished();
 			if (OnFinished)
 			{
 				OnFinished();
@@ -361,7 +361,7 @@ void ULocalTTSSubsystem::PlaySpeechAtActor(
 		PlaybackActor,
 		[this, OnFinished = MoveTemp(OnFinished)]() mutable
 		{
-			ServiceState = IsServiceReady() ? ELocalTTSServiceState::Ready : ELocalTTSServiceState::Starting;
+			HandlePlaybackFinished();
 			if (OnFinished)
 			{
 				OnFinished();
@@ -494,4 +494,10 @@ void ULocalTTSSubsystem::UpdateTTSFailure(const FString& ErrorMessage, ELocalTTS
 	LastTTSError = ErrorMessage;
 	LastTTSErrorCode = ErrorCode;
 	ServiceState = ErrorCode == ELocalTTSErrorCode::None ? ELocalTTSServiceState::Stopped : ELocalTTSServiceState::Error;
+}
+
+void ULocalTTSSubsystem::HandlePlaybackFinished()
+{
+	bIsTTSRequestInFlight = false;
+	ServiceState = IsServiceReady() ? ELocalTTSServiceState::Ready : ELocalTTSServiceState::Starting;
 }

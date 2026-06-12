@@ -204,6 +204,9 @@ private:
 	FLocalTTSLongTextRequest BuildLongTextRequest(const FString& Text) const;
 	bool StartSingleInternal(const FString& Text, bool bAutoPlay, FString& ErrorMessage);
 	bool StartLongTextInternal(const FString& Text, bool bAutoPlay, FString& ErrorMessage);
+	void BeginServiceReadinessPolling();
+	void PollServiceReadiness();
+	void StopServiceReadinessPolling();
 	void BindLongTextQueueCallbacks();
 	void UnbindLongTextQueueCallbacks();
 	void ClearActiveSingleAction();
@@ -217,6 +220,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ULocalTTSSpeakAsyncAction> ActiveSingleAction = nullptr;
 
+	FTimerHandle ServiceReadinessTimerHandle;
+
 	TArray<FString> EventLogLines;
+	int32 RemainingServiceReadinessPollCount = 0;
 	bool bActiveSingleAutoPlay = false;
+	bool bServiceReadinessCheckInFlight = false;
 };

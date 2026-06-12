@@ -100,6 +100,7 @@ private:
 	void UpdateHealthFailure(const FString& ErrorMessage, ELocalTTSErrorCode ErrorCode = ELocalTTSErrorCode::InternalError);
 	void UpdateTTSState(const FLocalTTSTTSResponse& Response);
 	void UpdateTTSFailure(const FString& ErrorMessage, ELocalTTSErrorCode ErrorCode = ELocalTTSErrorCode::InternalError);
+	void HandlePlaybackFinished();
 
 	TSharedPtr<FLocalTTSHttpClient> HttpClient;
 	TUniquePtr<FLocalTTSRequestValidator> RequestValidator;

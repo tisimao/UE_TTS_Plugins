@@ -62,6 +62,11 @@ void ULocalTTSLongTextQueue::StopQueue()
 	}
 
 	ClearActiveAction();
+	ClearPrefetchAction();
+	PrefetchedSegmentIndex = INDEX_NONE;
+	PrefetchedSegmentSpeechEvent = FLocalTTSSegmentSpeechEvent();
+	PrefetchedSegmentTTSResponse = FLocalTTSTTSResponse();
+	bPlayPrefetchedSegmentWhenReady = false;
 	SetQueueState(ELocalTTSLongTextQueueState::Stopped, TEXT("长文本队列已手动停止。"));
 	OnQueueStopped.Broadcast();
 }
@@ -176,18 +181,15 @@ bool ULocalTTSLongTextQueue::SkipToNext(FString& ErrorMessage)
 
 	if (QueueState == ELocalTTSLongTextQueueState::Playing && bAutoPlaySegments)
 	{
-		if (UObject* ContextObject = QueueWorldContextObject.Get())
+		const int32 NextSegmentIndex = CurrentSegmentIndex + 1;
+		if (!Segments.IsValidIndex(NextSegmentIndex))
 		{
-			ULocalTTSBlueprintLibrary::StopSpeaking(ContextObject);
+			ErrorMessage = TEXT("当前已经是最后一段，没有可提前准备的下一段。");
+			return false;
 		}
 
-		ClearActiveAction();
 		bSkipRequested = false;
-		CurrentSegmentSpeechEvent = FLocalTTSSegmentSpeechEvent();
-		CurrentSegmentTTSResponse = FLocalTTSTTSResponse();
-		SetQueueState(ELocalTTSLongTextQueueState::Generating, TEXT("已跳过当前播放段，准备处理下一段。"));
-		AdvanceQueue();
-		return true;
+		return StartPrefetchForSegment(NextSegmentIndex, ErrorMessage);
 	}
 
 	SetQueueState(ELocalTTSLongTextQueueState::Generating, TEXT("已请求跳过当前段，将在当前请求返回后进入下一段。"));
@@ -322,6 +324,77 @@ void ULocalTTSLongTextQueue::HandleActiveActionSucceeded(const FLocalTTSTTSRespo
 	CompleteCurrentSegment();
 }
 
+void ULocalTTSLongTextQueue::HandlePrefetchActionSpeechEventReady(const FLocalTTSSpeechEvent& SpeechEvent)
+{
+	if (bStopRequested || !Segments.IsValidIndex(PrefetchedSegmentIndex))
+	{
+		return;
+	}
+
+	PrefetchedSegmentSpeechEvent.Segment = Segments[PrefetchedSegmentIndex];
+	PrefetchedSegmentSpeechEvent.SpeechEvent = SpeechEvent;
+}
+
+void ULocalTTSLongTextQueue::HandlePrefetchActionError(const FString& ErrorMessage)
+{
+	ClearPrefetchAction();
+	PrefetchedSegmentIndex = INDEX_NONE;
+	PrefetchedSegmentSpeechEvent = FLocalTTSSegmentSpeechEvent();
+	PrefetchedSegmentTTSResponse = FLocalTTSTTSResponse();
+
+	if (!bStopRequested)
+	{
+		SetQueueState(QueueState, FString::Printf(TEXT("提前准备下一段失败：%s"), *ErrorMessage));
+		if (bPlayPrefetchedSegmentWhenReady)
+		{
+			bPlayPrefetchedSegmentWhenReady = false;
+			AdvanceQueue();
+		}
+	}
+}
+
+void ULocalTTSLongTextQueue::HandlePrefetchActionSucceeded(const FLocalTTSTTSResponse& Response)
+{
+	if (bStopRequested)
+	{
+		ClearPrefetchAction();
+		return;
+	}
+
+	if (!Response.bOk)
+	{
+		const FString ErrorMessage = Response.ErrorMessage.IsEmpty()
+			? TEXT("提前准备下一段失败：服务端返回失败响应。")
+			: Response.ErrorMessage;
+		HandlePrefetchActionError(ErrorMessage);
+		return;
+	}
+
+	PrefetchedSegmentTTSResponse = Response;
+	if (PrefetchedSegmentSpeechEvent.Segment.Text.IsEmpty() && Segments.IsValidIndex(PrefetchedSegmentIndex))
+	{
+		PrefetchedSegmentSpeechEvent.Segment = Segments[PrefetchedSegmentIndex];
+	}
+
+	ClearPrefetchAction();
+	SetQueueState(QueueState, FString::Printf(TEXT("下一段已提前准备完成：第 %d/%d 段。"), PrefetchedSegmentIndex + 1, Segments.Num()));
+
+	if (bPlayPrefetchedSegmentWhenReady && PrefetchedSegmentIndex == CurrentSegmentIndex + 1)
+	{
+		bPlayPrefetchedSegmentWhenReady = false;
+		const int32 NextSegmentIndex = PrefetchedSegmentIndex;
+		CurrentSegmentIndex = NextSegmentIndex;
+		CurrentSegmentSpeechEvent = PrefetchedSegmentSpeechEvent;
+		CurrentSegmentTTSResponse = PrefetchedSegmentTTSResponse;
+		PrefetchedSegmentIndex = INDEX_NONE;
+		PrefetchedSegmentSpeechEvent = FLocalTTSSegmentSpeechEvent();
+		PrefetchedSegmentTTSResponse = FLocalTTSTTSResponse();
+		OnSegmentStarted.Broadcast(Segments[CurrentSegmentIndex]);
+		OnSegmentGenerated.Broadcast(CurrentSegmentSpeechEvent);
+		PlayCurrentGeneratedSegment();
+	}
+}
+
 bool ULocalTTSLongTextQueue::StartQueueInternal(
 	UObject* InWorldContextObject,
 	const FLocalTTSLongTextRequest& LongTextRequest,
@@ -367,11 +440,15 @@ bool ULocalTTSLongTextQueue::StartQueueInternal(
 	CompletedSegmentEvents.Reset();
 	CurrentSegmentSpeechEvent = FLocalTTSSegmentSpeechEvent();
 	CurrentSegmentTTSResponse = FLocalTTSTTSResponse();
+	PrefetchedSegmentSpeechEvent = FLocalTTSSegmentSpeechEvent();
+	PrefetchedSegmentTTSResponse = FLocalTTSTTSResponse();
 	CurrentSegmentIndex = INDEX_NONE;
+	PrefetchedSegmentIndex = INDEX_NONE;
 	bAutoPlaySegments = bInAutoPlay;
 	bStopRequested = false;
 	bPauseRequested = false;
 	bSkipRequested = false;
+	bPlayPrefetchedSegmentWhenReady = false;
 
 	SetQueueState(
 		ELocalTTSLongTextQueueState::Segmenting,
@@ -448,7 +525,7 @@ void ULocalTTSLongTextQueue::StartCurrentSegment()
 	ActiveAction->Activate();
 }
 
-void ULocalTTSLongTextQueue::CompleteCurrentSegment()
+void ULocalTTSLongTextQueue::CompleteCurrentSegment(const bool bAdvanceQueue)
 {
 	if (Segments.IsValidIndex(CurrentSegmentIndex))
 	{
@@ -471,7 +548,10 @@ void ULocalTTSLongTextQueue::CompleteCurrentSegment()
 		return;
 	}
 
-	AdvanceQueue();
+	if (bAdvanceQueue)
+	{
+		AdvanceQueue();
+	}
 }
 
 void ULocalTTSLongTextQueue::FailCurrentSegment(const FString& ErrorMessage)
@@ -497,10 +577,74 @@ void ULocalTTSLongTextQueue::ClearActiveAction()
 	ActiveAction = nullptr;
 }
 
+void ULocalTTSLongTextQueue::ClearPrefetchAction()
+{
+	if (PrefetchAction)
+	{
+		PrefetchAction->OnSpeechEventReady.RemoveAll(this);
+		PrefetchAction->OnError.RemoveAll(this);
+		PrefetchAction->OnSucceeded.RemoveAll(this);
+		PrefetchAction = nullptr;
+	}
+}
+
 void ULocalTTSLongTextQueue::SetQueueState(const ELocalTTSLongTextQueueState NewState, const FString& DetailMessage)
 {
 	QueueState = NewState;
 	OnQueueStateChanged.Broadcast(NewState, DetailMessage);
+}
+
+bool ULocalTTSLongTextQueue::StartPrefetchForSegment(const int32 SegmentIndex, FString& ErrorMessage)
+{
+	if (!Segments.IsValidIndex(SegmentIndex))
+	{
+		ErrorMessage = TEXT("下一段序号无效，无法提前准备。");
+		return false;
+	}
+
+	if (HasPrefetchedSegment(SegmentIndex))
+	{
+		SetQueueState(QueueState, FString::Printf(TEXT("下一段已提前准备完成：第 %d/%d 段。"), SegmentIndex + 1, Segments.Num()));
+		return true;
+	}
+
+	if (PrefetchAction)
+	{
+		ErrorMessage = TEXT("下一段正在提前准备中，请稍后。");
+		return false;
+	}
+
+	FLocalTTSSpeakRequest SegmentRequest = ActiveRequest.SpeakRequestTemplate;
+	SegmentRequest.Text = Segments[SegmentIndex].Text;
+	if (ActiveRequest.bUseRecommendedDuration && SegmentRequest.Duration <= 0.0f)
+	{
+		SegmentRequest.Duration = Segments[SegmentIndex].RecommendedDuration;
+	}
+
+	PrefetchAction = ULocalTTSSpeakAsyncAction::GenerateSpeechAsync(QueueWorldContextObject.Get(), SegmentRequest);
+	if (!PrefetchAction)
+	{
+		ErrorMessage = TEXT("提前准备下一段失败：无法创建段落异步语音动作。");
+		return false;
+	}
+
+	PrefetchedSegmentIndex = SegmentIndex;
+	PrefetchedSegmentSpeechEvent = FLocalTTSSegmentSpeechEvent();
+	PrefetchedSegmentTTSResponse = FLocalTTSTTSResponse();
+	PrefetchAction->OnSpeechEventReady.AddDynamic(this, &ULocalTTSLongTextQueue::HandlePrefetchActionSpeechEventReady);
+	PrefetchAction->OnError.AddDynamic(this, &ULocalTTSLongTextQueue::HandlePrefetchActionError);
+	PrefetchAction->OnSucceeded.AddDynamic(this, &ULocalTTSLongTextQueue::HandlePrefetchActionSucceeded);
+	PrefetchAction->Activate();
+
+	SetQueueState(QueueState, FString::Printf(TEXT("当前段继续播放，正在提前准备第 %d/%d 段。"), SegmentIndex + 1, Segments.Num()));
+	return true;
+}
+
+bool ULocalTTSLongTextQueue::HasPrefetchedSegment(const int32 SegmentIndex) const
+{
+	return PrefetchedSegmentIndex == SegmentIndex
+		&& PrefetchedSegmentTTSResponse.bOk
+		&& !PrefetchedSegmentTTSResponse.WavPath.IsEmpty();
 }
 
 void ULocalTTSLongTextQueue::PlayCurrentGeneratedSegment()
@@ -551,7 +695,31 @@ void ULocalTTSLongTextQueue::PlayCurrentGeneratedSegment()
 				return;
 			}
 
-			CompleteCurrentSegment();
+			const int32 NextSegmentIndex = CurrentSegmentIndex + 1;
+			CompleteCurrentSegment(false);
+
+			if (HasPrefetchedSegment(NextSegmentIndex))
+			{
+				CurrentSegmentIndex = NextSegmentIndex;
+				CurrentSegmentSpeechEvent = PrefetchedSegmentSpeechEvent;
+				CurrentSegmentTTSResponse = PrefetchedSegmentTTSResponse;
+				PrefetchedSegmentIndex = INDEX_NONE;
+				PrefetchedSegmentSpeechEvent = FLocalTTSSegmentSpeechEvent();
+				PrefetchedSegmentTTSResponse = FLocalTTSTTSResponse();
+				OnSegmentStarted.Broadcast(Segments[CurrentSegmentIndex]);
+				OnSegmentGenerated.Broadcast(CurrentSegmentSpeechEvent);
+				PlayCurrentGeneratedSegment();
+				return;
+			}
+
+			if (PrefetchAction && PrefetchedSegmentIndex == NextSegmentIndex)
+			{
+				bPlayPrefetchedSegmentWhenReady = true;
+				SetQueueState(ELocalTTSLongTextQueueState::Generating, FString::Printf(TEXT("当前段播放完成，等待第 %d/%d 段提前准备完成。"), NextSegmentIndex + 1, Segments.Num()));
+				return;
+			}
+
+			AdvanceQueue();
 		},
 		[this](const FString& ErrorMessage)
 		{
