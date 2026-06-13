@@ -12,6 +12,8 @@ Use this workflow when creating or iterating a UE UMG interface by editing UIJso
 - Preserve existing widget `name`, `class`, and `isVariable` for all event-facing Blueprint variables unless the user explicitly allows breaking Blueprint references.
 - Treat both top-level `isVariable` and property `bIsVariable` as part of the Blueprint contract. If an existing Blueprint-accessed widget is variable in the source export, keep both set to true in generated JSON.
 - Do not rename typo variables that already exist in Blueprint graphs, such as `Text_Erro`; compatibility beats cleanup.
+- When editing `profile=full` JSON, preserve `blueprintVariables`, `functionSignatures`, `graphs`, and `graphs.items[*].clipboardText` by default. Do not rewrite EventGraph clipboard text unless the user explicitly asks to change interaction logic.
+- If adding UI controls before interaction logic is ready, add stable variable widgets and, when useful, empty function signatures with complete names/types. State clearly that new controls are not wired yet.
 - Prefer hierarchical region layout over flat widgets: root stage, top bar, main columns, bottom panels, then repeated rows/items.
 - Match the reference mockup by layout first, text containers second, typography third, and decorative effects last.
 - Keep dynamic effects minimal and intentional. If the user only wants a status effect, do not add unrelated animated glows, pulses, or sweeping elements.
@@ -138,7 +140,10 @@ Before finishing:
 6. Check for bad font references: `DroidSansFallback`, `FontObject=None`.
 7. Check that dynamic/effect widgets are limited to the intended region.
 8. For parent/child UI work, confirm each referenced child UI exists or has an exported JSON to import first.
-9. Run the UIJsonBridge importer automation test when available.
+9. For `profile=full`, verify `blueprintVariables`, `functionSignatures`, and `graphs` counts match their `items.length`; verify EventGraph clipboard text is still present and unchanged unless intentionally modified.
+10. Run the UIJsonBridge importer automation test when available.
+
+After a Full import into UE, the Event Graph may need a manual refresh before it behaves cleanly. Open the Widget Blueprint, open Event Graph, select all nodes, run `Refresh Nodes`, then compile and save. Include this note in the final answer when delivering a Full JSON intended to preserve graph logic.
 
 Typical UE command:
 

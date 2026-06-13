@@ -8,11 +8,15 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
+#include "EdGraphUtilities.h"
 #include "HAL/FileManager.h"
 #include "JsonObjectConverter.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_ComponentBoundEvent.h"
 #include "K2Node_Event.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -62,6 +66,11 @@ namespace UIJsonBridge
 	}
 
 	static bool ShouldExportGraphPins(EUIJsonBridgeExportProfile Profile)
+	{
+		return Profile == EUIJsonBridgeExportProfile::Full;
+	}
+
+	static bool ShouldExportGraphClipboardText(EUIJsonBridgeExportProfile Profile)
 	{
 		return Profile == EUIJsonBridgeExportProfile::Full;
 	}
@@ -265,6 +274,23 @@ namespace UIJsonBridge
 		return Json;
 	}
 
+	static TSharedRef<FJsonObject> ExportFunctionParameter(const UEdGraphPin* Pin)
+	{
+		TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+		if (!Pin)
+		{
+			return Json;
+		}
+
+		Json->SetStringField(TEXT("name"), Pin->PinName.ToString());
+		Json->SetStringField(TEXT("displayName"), Pin->GetDisplayName().ToString());
+		Json->SetObjectField(TEXT("type"), ExportPinType(Pin->PinType));
+		Json->SetStringField(TEXT("defaultValue"), Pin->DefaultValue);
+		Json->SetStringField(TEXT("defaultObject"), Pin->DefaultObject ? Pin->DefaultObject->GetPathName() : FString());
+		Json->SetStringField(TEXT("defaultText"), Pin->DefaultTextValue.ToString());
+		return Json;
+	}
+
 	static TSharedRef<FJsonObject> ExportPin(const UEdGraphPin* Pin)
 	{
 		TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
@@ -405,6 +431,22 @@ namespace UIJsonBridge
 		Json->SetArrayField(TEXT("nodes"), Nodes);
 		Json->SetNumberField(TEXT("nodeCount"), Nodes.Num());
 
+		if (ShouldExportGraphClipboardText(Profile) && GraphKind == TEXT("ubergraph"))
+		{
+			TSet<UObject*> NodesToExport;
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				if (Node)
+				{
+					NodesToExport.Add(Node);
+				}
+			}
+
+			FString ClipboardText;
+			FEdGraphUtilities::ExportNodesToText(NodesToExport, ClipboardText);
+			Json->SetStringField(TEXT("clipboardText"), ClipboardText);
+		}
+
 		return Json;
 	}
 
@@ -439,6 +481,92 @@ namespace UIJsonBridge
 
 		Json->SetArrayField(TEXT("items"), Graphs);
 		Json->SetNumberField(TEXT("count"), Graphs.Num());
+		return Json;
+	}
+
+	static TSharedRef<FJsonObject> ExportFunctionSignature(const UEdGraph* Graph)
+	{
+		TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+		if (!Graph)
+		{
+			return Json;
+		}
+
+		Json->SetStringField(TEXT("name"), Graph->GetName());
+		Json->SetStringField(TEXT("displayName"), Graph->GetFName().ToString());
+		Json->SetStringField(TEXT("objectPath"), Graph->GetPathName());
+
+		TArray<TSharedPtr<FJsonValue>> Inputs;
+		TArray<TSharedPtr<FJsonValue>> Outputs;
+		for (const UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (const UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node))
+			{
+				for (const UEdGraphPin* Pin : EntryNode->Pins)
+				{
+					if (Pin && Pin->Direction == EGPD_Output && !Pin->bHidden && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+					{
+						Inputs.Add(MakeShared<FJsonValueObject>(ExportFunctionParameter(Pin)));
+					}
+				}
+			}
+			else if (const UK2Node_FunctionResult* ResultNode = Cast<UK2Node_FunctionResult>(Node))
+			{
+				for (const UEdGraphPin* Pin : ResultNode->Pins)
+				{
+					if (Pin && Pin->Direction == EGPD_Input && !Pin->bHidden && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+					{
+						Outputs.Add(MakeShared<FJsonValueObject>(ExportFunctionParameter(Pin)));
+					}
+				}
+			}
+		}
+
+		Json->SetArrayField(TEXT("inputs"), Inputs);
+		Json->SetArrayField(TEXT("outputs"), Outputs);
+		return Json;
+	}
+
+	static TSharedRef<FJsonObject> ExportFunctionSignatures(const UWidgetBlueprint* WidgetBlueprint)
+	{
+		TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Functions;
+		for (const UEdGraph* Graph : WidgetBlueprint->FunctionGraphs)
+		{
+			if (Graph)
+			{
+				Functions.Add(MakeShared<FJsonValueObject>(ExportFunctionSignature(Graph)));
+			}
+		}
+
+		Json->SetArrayField(TEXT("items"), Functions);
+		Json->SetNumberField(TEXT("count"), Functions.Num());
+		return Json;
+	}
+
+	static TSharedRef<FJsonObject> ExportBlueprintVariable(const FBPVariableDescription& Variable)
+	{
+		TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+		Json->SetStringField(TEXT("name"), Variable.VarName.ToString());
+		Json->SetStringField(TEXT("guid"), Variable.VarGuid.ToString(EGuidFormats::DigitsWithHyphens));
+		Json->SetObjectField(TEXT("type"), ExportPinType(Variable.VarType));
+		Json->SetStringField(TEXT("defaultValue"), Variable.DefaultValue);
+		Json->SetStringField(TEXT("category"), Variable.Category.ToString());
+		Json->SetStringField(TEXT("friendlyName"), Variable.FriendlyName);
+		return Json;
+	}
+
+	static TSharedRef<FJsonObject> ExportBlueprintVariables(const UWidgetBlueprint* WidgetBlueprint)
+	{
+		TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Variables;
+		for (const FBPVariableDescription& Variable : WidgetBlueprint->NewVariables)
+		{
+			Variables.Add(MakeShared<FJsonValueObject>(ExportBlueprintVariable(Variable)));
+		}
+
+		Json->SetArrayField(TEXT("items"), Variables);
+		Json->SetNumberField(TEXT("count"), Variables.Num());
 		return Json;
 	}
 }
@@ -478,6 +606,11 @@ bool FUIJsonBridgeExporter::ExportWidgetBlueprint(UWidgetBlueprint* WidgetBluepr
 	if (UIJsonBridge::ShouldExportBindings(Profile))
 	{
 		Root->SetObjectField(TEXT("bindings"), UIJsonBridge::ExportBindings(WidgetBlueprint));
+	}
+	if (Profile == EUIJsonBridgeExportProfile::Full)
+	{
+		Root->SetObjectField(TEXT("blueprintVariables"), UIJsonBridge::ExportBlueprintVariables(WidgetBlueprint));
+		Root->SetObjectField(TEXT("functionSignatures"), UIJsonBridge::ExportFunctionSignatures(WidgetBlueprint));
 	}
 	if (UIJsonBridge::ShouldExportAnimations(Profile))
 	{

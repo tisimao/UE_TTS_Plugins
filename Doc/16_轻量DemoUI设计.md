@@ -259,11 +259,22 @@ Duration = 0.0
 | 控件名 | 类型 | 显示文字 |
 | --- | --- | --- |
 | `Input_SingleText` | MultiLineEditableTextBox | 单句或短文本输入 |
-| `Btn_SpeakSingle` | Button | 生成并播放 |
 | `Btn_GenerateSingle` | Button | 仅生成 WAV |
+| `Btn_PlayLastSingle` | Button | 播放最新 WAV |
+| `Btn_PlayLastResponse` | Button | 播放最近响应 |
+| `Btn_SpeakSingle` | Button | 生成并播放 |
 | `Btn_StopSingle` | Button | 停止播放 |
-| `Txt_SingleState` | TextBlock | 单句状态 |
+| `Txt_SingleState` | TextBlock | 单句生成状态 |
+| `Txt_PlaybackState` | TextBlock | 单句播放状态 |
 | `Txt_SingleResult` | TextBlock | 单句结果 |
+
+按钮定位：
+
+- `Btn_GenerateSingle` 是新版主入口，用来验证“申请音频 / 生成 WAV”。
+- `Btn_PlayLastSingle` 是新版主入口，用来验证“播放已有 WAV”，不再请求 TTS 服务。
+- `Btn_PlayLastResponse` 用来验证 `FLocalTTSTTSResponse -> 播放` 链路，后续做历史列表时可复用。
+- `Btn_SpeakSingle` 只作为兼容和快速冒烟入口保留，不建议作为复杂 UI 的唯一主流程。
+- `Btn_StopSingle` 只停止 UE 播放层，不承诺取消服务端正在生成的请求。
 
 ### 4.4 长文本队列区
 
@@ -302,12 +313,14 @@ Duration = 0.0
 | `DemoController` | `Local TTS Demo Controller Object Reference` | 空 | 推荐由 `BP_LocalTTS_DemoController` 创建 Widget 后传入。Widget 优先调用它，少接底层回调线。 |
 | `LongTextQueue` | `Local TTS Long Text Queue Object Reference` | 空 | 必须保存。否则队列对象可能被 GC。 |
 | `CurrentSpeakState` | `ELocalTTSSpeakAsyncState` | 空 | 单句异步请求状态。 |
+| `CurrentPlaybackState` | `ELocalTTSSpeakAsyncState` | `Idle` | 单句播放状态。播放最新 WAV、播放响应、播放语音事件时由 Widget 或后续 DemoController 包装函数更新。 |
 | `CurrentQueueState` | `ELocalTTSLongTextQueueState` | `Idle` | 长文本队列状态。 |
 | `CurrentSegmentIndex` | `Integer` | `-1` | 当前段序号。 |
 | `TotalSegmentCount` | `Integer` | `0` | 总段数。 |
 | `LastErrorText` | `String` | 空 | 最近错误。 |
 | `LastWavPath` | `String` | 空 | 最近 wav。 |
 | `LastRequestId` | `String` | 空 | 最近请求 ID。 |
+| `LastPlaybackErrorText` | `String` | 空 | 最近播放错误。和生成错误分开显示，避免误判是服务端生成失败。 |
 
 为什么必须保存 `LongTextQueue`：
 
@@ -319,6 +332,7 @@ Duration = 0.0
 
 - `LongTextQueue` 可以不放在 Widget 里，直接读取 `DemoController.LongTextQueue`。
 - `CurrentSpeakState`、`CurrentQueueState`、`LastErrorText`、`LastWavPath`、`LastRequestId` 都可以直接绑定到 `DemoController` 对应字段。
+- `CurrentPlaybackState` 当前建议先由 Widget 监听播放异步节点更新。后续如果 C++ 层给 `ALocalTTSDemoController` 增加播放包装函数，再统一迁移到 `DemoController`。
 - Widget 的 `Event Construct` 只需要绑定 `Demo 状态已更新`，然后调用一个自定义 `RefreshFromDemoController` 函数刷新所有 TextBlock。
 
 ## 6. Widget 初始化接线
@@ -538,9 +552,35 @@ Btn_CheckHealth.OnClicked
 
 ## 8. 单句语音区蓝图接线
 
-### 8.1 生成并播放
+### 8.0 推荐调用模型
 
-`Btn_SpeakSingle.OnClicked`：
+现在插件已经把“申请音频”和“播放音频”拆开，Demo UI 也应该按两层组织：
+
+```text
+生成层：Text -> FLocalTTSTTSResponse / FLocalTTSSpeechEvent / WAV Path
+播放层：WAV Path / FLocalTTSTTSResponse / FLocalTTSSpeechEvent -> UE AudioComponent
+```
+
+单句区推荐保留三条测试路径：
+
+| 路径 | 按钮 | 调用入口 | 目的 |
+| --- | --- | --- | --- |
+| 新版主路径 A | `Btn_GenerateSingle` -> `Btn_PlayLastSingle` | `Demo 单句仅生成 WAV` -> `播放最新 Local TTS WAV` | 验证生成和播放完全分离。 |
+| 新版主路径 B | `Btn_GenerateSingle` -> `Btn_PlayLastResponse` | `Demo 单句仅生成 WAV` -> `播放 Local TTS 响应` | 验证 Response 可被保存、传递、重播。 |
+| 兼容路径 | `Btn_SpeakSingle` | `Demo 单句生成并播放` | 快速冒烟，确认旧式一键流程没有退化。 |
+
+状态也拆成两组：
+
+| 状态 | 推荐显示控件 | 来源 |
+| --- | --- | --- |
+| 生成状态 | `Txt_SingleState` | `DemoController.SingleStateText` |
+| 播放状态 | `Txt_PlaybackState` | 播放异步节点 `OnStateChanged`，或后续 DemoController 播放包装字段 |
+| 最近结果 | `Txt_SingleResult` / `Txt_LastWavPath` / `Txt_LastRequestId` | `DemoController.LastTTSResponse`、`LastWavPath`、`LastRequestId` |
+| 错误 | `Txt_Error` | 生成错误和播放错误都显示，但文案要带阶段前缀 |
+
+### 8.1 生成并播放兼容入口
+
+`Btn_SpeakSingle.OnClicked` 保留为兼容入口和快速冒烟入口：
 
 ```text
 Btn_SpeakSingle.OnClicked
@@ -557,9 +597,11 @@ Btn_SpeakSingle.OnClicked
      -> Branch(ReturnValue)
         true:
           -> Set Txt_Error = ""
+          -> Set Txt_SingleState = "生成并播放请求已提交"
+          -> Set Txt_PlaybackState = "等待音频就绪"
           -> Call CE_RefreshFromDemoController
         false:
-          -> Set Txt_Error = ErrorMessage
+          -> Set Txt_Error = "生成并播放失败：" + ErrorMessage
 ```
 
 实现位置：
@@ -574,9 +616,13 @@ Btn_SpeakSingle.OnClicked
 Demo 状态已更新
 -> Call CE_RefreshFromDemoController
 -> DemoController.SingleState
--> 语音异步状态是否应禁用按钮
--> Set Btn_SpeakSingle IsEnabled = NOT ReturnValue
--> Set Btn_GenerateSingle IsEnabled = NOT ReturnValue
+-> 如果 State == AudioReady 或 Playing:
+   -> Set Txt_PlaybackState = "自动播放中"
+-> 如果 State == Finished:
+   -> Set Txt_PlaybackState = "自动播放完成"
+-> 如果 State == Error:
+   -> Set Txt_PlaybackState = "自动播放错误"
+-> Call UpdateSingleButtons
 ```
 
 为什么优先监听 `状态变化`：
@@ -584,15 +630,16 @@ Demo 状态已更新
 - 一个 `Demo 状态已更新` 回调就能驱动 UI 的“思考中 / 等待服务 / 生成中 / 播放中 / 完成 / 错误”。
 - 不需要在 Widget 里重复绑定底层单句异步节点。
 - 按钮是否禁用可以继续用插件提供的 `语音异步状态是否应禁用按钮`，但输入状态来自 `DemoController.SingleState`。
+- 复杂 UI 不应只依赖这个按钮，因为它无法验证“生成后稍后播放、重播旧响应、播放历史项”等新能力。
 
 为什么不只看 `生成成功`：
 
 - `DemoController` 已经把底层“开始 / 成功 / 音频已就绪 / 完成 / 错误 / 状态变化”汇总到了统一状态字段里。
 - UI 不必再单独绑定底层 `生成并播放 Local TTS` 的每个 delegate。
 
-### 8.2 仅生成 WAV
+### 8.2 仅生成 WAV（新版主入口）
 
-`Btn_GenerateSingle.OnClicked`：
+`Btn_GenerateSingle.OnClicked` 是新版单句主入口：
 
 ```text
 Btn_GenerateSingle.OnClicked
@@ -609,9 +656,11 @@ Btn_GenerateSingle.OnClicked
      -> Branch(ReturnValue)
         true:
           -> Set Txt_Error = ""
+          -> Set Txt_SingleState = "生成请求已提交"
           -> Call CE_RefreshFromDemoController
         false:
-          -> Set Txt_Error = ErrorMessage
+          -> Set Txt_Error = "生成失败：" + ErrorMessage
+          -> Call CE_RefreshFromDemoController
 ```
 
 实现位置：
@@ -625,57 +674,118 @@ Btn_GenerateSingle.OnClicked
 ```text
 Demo 状态已更新
 -> Call CE_RefreshFromDemoController
+-> Set Txt_SingleState = DemoController.SingleStateText
 -> Set Txt_SingleResult = DemoController.LastRequestId + " / " + DemoController.LastWavPath
+-> Set Txt_LastRequestId = DemoController.LastRequestId
+-> Set Txt_LastWavPath = DemoController.LastWavPath
 ```
 
 为什么仅生成也监听 `语音事件已就绪`：
 
 - 数字人和字幕更需要 `FLocalTTSSpeechEvent`，不只是 `FLocalTTSTTSResponse`。
 - 当前这些数据已经会被 `DemoController` 汇总到 `LastSpeechEvent`、`LastWavPath`、`LastRequestId`。
+- UI 在 `AudioReady` 或 `Finished` 后就可以启用播放按钮，播放不再依赖重新生成。
 
-### 8.3 新版播放入口
+### 8.3 播放最新 WAV
 
-后续调整 UI 时，建议把“生成”和“播放”拆开：
-
-```text
-Btn_GenerateSingle：仅生成 Local TTS
-Btn_PlayLastSingle：播放最新 Local TTS WAV
-Btn_PlaySelectedHistory：播放 Local TTS 响应
-Btn_StopSingle：停止 Local TTS 播放
-```
-
-`Btn_PlayLastSingle.OnClicked` 推荐接线：
+`Btn_PlayLastSingle.OnClicked` 用来播放最近一次生成成功的 WAV，不请求 TTS 服务：
 
 ```text
 Btn_PlayLastSingle.OnClicked
--> 播放最新 Local TTS WAV
-   WorldContextObject = self
--> OnAudioReady:
-   -> Set Txt_SingleState = "播放中"
-   -> Set Txt_LastWavPath = Response.WavPath
--> OnFinished:
-   -> Set Txt_SingleState = "播放完成"
--> OnError:
-   -> Set Txt_Error = ErrorMessage
+-> Branch(LastWavPath 是否为空)
+   true:
+     -> Set Txt_Error = "播放失败：还没有可播放的 WAV，请先点击 仅生成 WAV。"
+   false:
+     -> 播放最新 Local TTS WAV
+        WorldContextObject = self
+     -> OnStateChanged:
+        -> Set CurrentPlaybackState = State
+        -> Set Txt_PlaybackState = "播放：" + DetailMessage
+        -> Call UpdateSingleButtons
+     -> OnAudioReady:
+        -> Set Txt_Error = ""
+        -> Set Txt_PlaybackState = "播放中"
+        -> Set Txt_LastWavPath = Response.WavPath
+     -> OnFinished:
+        -> Set CurrentPlaybackState = Finished
+        -> Set Txt_PlaybackState = "播放完成"
+        -> Call UpdateSingleButtons
+     -> OnError:
+        -> Set CurrentPlaybackState = Error
+        -> Set LastPlaybackErrorText = ErrorMessage
+        -> Set Txt_Error = "播放失败：" + ErrorMessage
+        -> Set Txt_PlaybackState = "播放错误"
+        -> Call UpdateSingleButtons
 ```
 
-如果 UI 做历史列表，推荐流程：
+实现位置：
+
+- 蓝图：`WBP_LocalTTS_DemoPanel`
+- 图表：`Event Graph`
+- 入口节点：按钮事件 `Btn_PlayLastSingle.OnClicked`
+- 异步节点：`播放最新 Local TTS WAV`
+
+注意：
+
+- `播放最新 Local TTS WAV` 消费的是 `ULocalTTSSubsystem` 内保存的最近生成结果。
+- 它不调用 `/tts`，所以不会让 TTS 生成请求进入 busy。
+- 如果服务端 cache 中的 WAV 已被清理，播放会失败。这种失败属于播放层错误，不是生成层错误。
+
+### 8.4 播放最近响应
+
+`Btn_PlayLastResponse.OnClicked` 用来验证 `FLocalTTSTTSResponse` 可以作为独立播放输入。当前 UI 如果不做历史列表，可以先播放 `DemoController.LastTTSResponse`：
+
+```text
+Btn_PlayLastResponse.OnClicked
+-> Is Valid(DemoController)
+-> Branch
+   false:
+     -> Set Txt_Error = "DemoController 无效。"
+   true:
+     -> Branch(DemoController.LastTTSResponse.WavPath 是否为空)
+        true:
+          -> Set Txt_Error = "播放失败：最近响应没有 WAV 路径。"
+        false:
+          -> 播放 Local TTS 响应
+             WorldContextObject = self
+             Response = DemoController.LastTTSResponse
+          -> OnStateChanged:
+             -> Set CurrentPlaybackState = State
+             -> Set Txt_PlaybackState = "播放响应：" + DetailMessage
+             -> Call UpdateSingleButtons
+          -> OnAudioReady:
+             -> Set Txt_Error = ""
+             -> Set Txt_PlaybackState = "响应播放中"
+             -> Set Txt_LastWavPath = Response.WavPath
+          -> OnFinished:
+             -> Set CurrentPlaybackState = Finished
+             -> Set Txt_PlaybackState = "响应播放完成"
+             -> Call UpdateSingleButtons
+          -> OnError:
+             -> Set CurrentPlaybackState = Error
+             -> Set Txt_Error = "播放响应失败：" + ErrorMessage
+             -> Set Txt_PlaybackState = "播放错误"
+             -> Call UpdateSingleButtons
+```
+
+如果后续 UI 做历史列表，推荐流程：
 
 ```text
 获取 Local TTS 语音历史
--> For Each Response 创建一行
--> 行按钮 OnClicked
+-> For Each Response 创建一行 WBP_LocalTTS_HistoryRow
+-> Row 显示 RequestId / WavPath / DurationMs
+-> Row.Btn_Play.OnClicked
 -> 播放 Local TTS 响应
+   Response = 当前行保存的 Response
 ```
 
-为什么这样拆：
+为什么要测试 `播放响应`，而不只测试 `播放最新 WAV`：
 
-- 生成 WAV 不会自动打断当前播放。
-- 重播最新声音不再请求 TTS 服务。
-- 播放旧声音只消费已有 WAV，不会触发生成 busy。
-- 长文本、字幕和数字人可以先拿到 `SpeechEvent`，需要播放时再调用播放节点。
+- `播放最新 WAV` 只能验证最近一次结果。
+- `播放 Local TTS 响应` 可以验证历史列表、缓存列表、数字人任务列表里的任意一条声音。
+- 后续如果要做“选中某句重播”，应该走 Response 或 SpeechEvent，而不是总读 Last。
 
-### 8.4 停止播放
+### 8.5 停止播放
 
 `Btn_StopSingle.OnClicked`：
 
@@ -687,8 +797,10 @@ Btn_StopSingle.OnClicked
      -> Set Txt_Error = "DemoController 无效。"
    true:
      -> DemoController.Demo 停止单句播放
+     -> Set CurrentPlaybackState = Finished
+     -> Set Txt_PlaybackState = "已请求停止播放"
      -> Call CE_RefreshFromDemoController
-     -> Set Txt_SingleState = "已请求停止播放"
+     -> Call UpdateSingleButtons
 ```
 
 实现位置：
@@ -701,6 +813,75 @@ Btn_StopSingle.OnClicked
 
 - 单次 TTS 的服务端生成请求目前不能立即取消。
 - 如果音频已经在 UE 播放，停止会释放当前 AudioComponent。
+- 如果正在生成但还没开始播放，停止不会让服务端 `/tts` 立即中断，只能影响后续播放层。
+
+### 8.6 单句按钮启用规则
+
+建议新增一个 Widget 自定义函数 `UpdateSingleButtons`，由 `CE_RefreshFromDemoController` 和播放异步节点回调共同调用。
+
+输入状态：
+
+```text
+GenerateState = DemoController.SingleState
+PlaybackState = CurrentPlaybackState
+HasLastWav = DemoController.LastWavPath 非空
+```
+
+推荐规则：
+
+| 条件 | 生成 WAV | 播放最新 | 播放响应 | 生成并播放 | 停止播放 |
+| --- | --- | --- | --- | --- | --- |
+| 空闲且没有 WAV | 可用 | 禁用 | 禁用 | 可用 | 禁用 |
+| 生成中 | 禁用 | 如果已有 WAV 可用 | 如果已有 Response 可用 | 禁用 | 播放中才可用 |
+| 生成完成且有 WAV | 可用 | 可用 | 可用 | 可用 | 禁用 |
+| 播放中 | 可用，除非插件 busy | 禁用 | 禁用 | 禁用 | 可用 |
+| 播放错误 | 可用 | 有 WAV 则可用 | 有 Response 则可用 | 可用 | 禁用 |
+| 生成错误 | 可用 | 有旧 WAV 则可用 | 有旧 Response 则可用 | 可用 | 禁用 |
+
+蓝图实现可以简化为：
+
+```text
+UpdateSingleButtons
+-> GenerateBusy = 语音异步状态是否应禁用按钮(DemoController.SingleState)
+-> PlaybackBusy = CurrentPlaybackState == Playing 或 CurrentPlaybackState == Started 或 CurrentPlaybackState == AudioReady
+-> HasLastWav = DemoController.LastWavPath != ""
+-> Set Btn_GenerateSingle IsEnabled = NOT GenerateBusy
+-> Set Btn_SpeakSingle IsEnabled = NOT GenerateBusy AND NOT PlaybackBusy
+-> Set Btn_PlayLastSingle IsEnabled = HasLastWav AND NOT PlaybackBusy
+-> Set Btn_PlayLastResponse IsEnabled = HasLastWav AND NOT PlaybackBusy
+-> Set Btn_StopSingle IsEnabled = PlaybackBusy
+```
+
+注意：
+
+- 是否允许“播放中继续生成下一条”取决于测试目标。插件层播放和生成已经拆开，理论上播放中可以提交下一次生成；如果人工验收想降低变量，可以临时在 UI 层禁用生成按钮。
+- 服务端同一时间仍只建议一个 TTS 生成请求。若插件返回 busy，UI 显示生成层错误即可。
+- 播放按钮不应因为服务端生成 busy 而禁用，因为播放已有 WAV 不需要服务端。
+
+### 8.7 单句区最小验收步骤
+
+更新 UI 后，建议按下面顺序人工测试：
+
+```text
+1. 点击 启动服务。
+2. 点击 检查健康，确认服务 ready。
+3. 点击 仅生成 WAV。
+4. 观察 Txt_SingleState 进入生成中，随后进入 AudioReady / Finished。
+5. 确认 Txt_LastRequestId 和 Txt_LastWavPath 有值。
+6. 点击 播放最新 WAV，确认不会再次请求 /tts，只触发播放状态。
+7. 点击 停止播放，确认播放停止，生成结果仍保留。
+8. 点击 播放最近响应，确认同一个 WAV 可以重播。
+9. 点击 生成并播放，确认兼容路径仍可用。
+10. 播放中再次点击 仅生成 WAV，按当前 UI 策略验证允许或禁用是否符合预期。
+```
+
+通过标准：
+
+- `仅生成 WAV` 成功后，即使不播放，也能看到 RequestId 和 WavPath。
+- `播放最新 WAV` 不应改变 RequestId，不应触发新的生成请求。
+- `播放最近响应` 可以复用最近一次生成结果。
+- `停止播放` 不清空最近生成结果。
+- 生成错误和播放错误在 UI 文案上能区分。
 
 ## 9. 长文本队列区蓝图接线
 
@@ -1009,6 +1190,10 @@ Demo 状态已更新
 
 ## 12. 当前限制
 
+- 当前 `ALocalTTSDemoController` 已经封装了单句生成和长文本队列，但还没有单独封装 `PlayLastSingle` / `PlayResponse` 这类播放包装函数。下一版 UI 可以先直接在 Widget 里调用 `ULocalTTSPlayWavAsyncAction` 系列节点。
+- 单句区现在建议拆成生成状态和播放状态。`DemoController.SingleStateText` 只能完整描述生成并播放兼容流程，不能单独表达“播放最新 WAV”的全部状态。
+- `播放最新 Local TTS WAV` 依赖运行期最近一次成功生成结果。重启 PIE 后历史会清空。
+- 已生成 WAV 当前主要位于服务端 cache 目录。cache 被清理后，历史 Response 里即使还有路径，也可能播放失败。
 - 长文本队列目前是 UObject 队列对象，不是专门的 `BlueprintAsyncActionBase` 节点，所以 UI 必须保存 `LongTextQueue` 变量。
 - 生成中暂停不会立即暂停服务端推理，只会在当前段生成完成后停住。
 - 生成中跳段和停止属于软控制，当前请求返回后会被队列忽略。
@@ -1019,8 +1204,12 @@ Demo 状态已更新
 
 当前 Demo 稳定后，再考虑：
 
+- 在 `ALocalTTSDemoController` 增加 `PlayLastSingle`、`PlayLastResponse`、`PlayLastSpeechEvent` 包装函数，把播放状态也汇总进 `Demo 状态已更新`，让 Widget 不再直接绑定播放异步节点。
+- 新增 `PlaybackStateText`、`LastPlaybackErrorMessage`，和 `SingleStateText`、`LastErrorMessage` 分开。
 - 新增 `WBP_LocalTTS_SegmentRow`，用列表显示所有分段。
+- 新增 `WBP_LocalTTS_HistoryRow`，用 `获取 Local TTS 语音历史` 显示最近 20 条 Response，并支持点击重播。
 - 增加 3D Actor 播放测试，把声音绑定到 `TTS_Speaker`。
+- 增加“保存到语音库”能力，把重要 WAV 从 cache 复制到长期目录，例如 `Saved/LocalTTS/Library`。
 - 新增长文本专用异步蓝图节点，减少 UI 手动保存队列对象的步骤。
 - 在关卡里加入字幕条，直接显示 `段落开始` 的文本。
 - 后续数字人接入时，让 `段落已生成` 驱动口型分析入口。

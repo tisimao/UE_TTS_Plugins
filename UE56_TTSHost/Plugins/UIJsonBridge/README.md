@@ -2,6 +2,8 @@
 
 Editor-only UE plugin for exporting UMG Widget Blueprints to JSON and importing safe layout JSON back into Widget Blueprints.
 
+`Layout Only` remains the recommended profile for normal visual iteration. `Full` now supports an experimental simple-interaction round trip: it can import the WidgetTree, Blueprint variables, function signatures, and EventGraph clipboard text. After a Full import, open the Widget Blueprint, refresh all graph nodes, then compile/save.
+
 中文完整文档：
 
 ```text
@@ -30,9 +32,9 @@ The content browser menu exposes three export modes:
   - Marked as `importable=false`; the importer rejects it.
 
 - `Export UI JSON - Full`
-  - Deep analysis / backup.
-  - Exports layout plus graph nodes, pins, links, comments, defaults, bindings, and animations.
-  - Import currently only rebuilds the WidgetTree, not Blueprint Graphs.
+  - Deep analysis / backup / experimental simple-interaction round trip.
+  - Exports layout plus Blueprint variables, function signatures, graph nodes, pins, links, comments, defaults, bindings, animations, and EventGraph clipboard text when available.
+  - Import rebuilds the WidgetTree and restores supported interaction metadata. Function signatures may be restored with empty bodies; EventGraph logic is restored from clipboard text and should be refreshed in the Blueprint editor after import.
 
 Default filenames:
 
@@ -54,16 +56,25 @@ Imported:
 - Editable widget properties
 - Panel slot properties
 - Canvas slot layout
+- Blueprint variables from `Full` JSON
+- Function signatures from `Full` JSON
+- EventGraph clipboard text from `Full` JSON
 
 Not imported:
 
-- Blueprint Graph nodes
-- Event nodes
-- Pin links
-- Function graphs
+- `interaction` JSON
+- Arbitrary graph reconstruction from compact metadata
+- Function graph bodies beyond signature restoration
 - Animation timelines
 
 The importer rejects `interaction` JSON and files marked `importable=false`.
+
+For `Full` imports, perform this manual pass in UE after import:
+
+1. Open the Widget Blueprint.
+2. Open the Event Graph.
+3. Select all nodes, run `Refresh Nodes`.
+4. Compile and save.
 
 ## Safety
 
@@ -74,6 +85,7 @@ The importer is intentionally defensive:
 - Replaces the target tree only after successful construction.
 - Moves old widgets to transient before rebuilding, preventing same-name/different-class UE fatal errors.
 - Synchronizes `WidgetVariableNameToGuidMap` after import.
+- Rejects JSON exported from a different UE major/minor version when `engineHint` does not match the running editor.
 - Compiles the Widget Blueprint after import.
 
 ## Encoding And CJK Text
@@ -113,6 +125,8 @@ UIJsonBridge.Importer.ImportsFromScratchLayoutJson
 UIJsonBridge.Importer.ImportsProjectResponsiveSafeJson
 UIJsonBridge.Importer.ReplacesSameNamedDifferentClassWidgets
 UIJsonBridge.Importer.FailedImportPreservesExistingTree
+UIJsonBridge.Full.InteractionMetadataRoundTrip
+UIJsonBridge.Importer.BlocksMismatchedEngineVersion
 ```
 
 Manual from-scratch layout test file:

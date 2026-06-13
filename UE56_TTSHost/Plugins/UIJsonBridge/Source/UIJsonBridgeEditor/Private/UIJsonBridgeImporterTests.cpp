@@ -11,7 +11,11 @@
 #include "Components/HorizontalBox.h"
 #include "Components/TextBlock.h"
 #include "Components/WrapBox.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraphSchema_K2.h"
 #include "Fonts/CompositeFont.h"
+#include "K2Node_FunctionEntry.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "HAL/FileManager.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
@@ -334,6 +338,172 @@ bool FUIJsonBridgeImporterClassReplacementTest::RunTest(const FString& Parameter
 
 	IFileManager::Get().Delete(*FirstJsonPath);
 	IFileManager::Get().Delete(*ReplacementJsonPath);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUIJsonBridgeFullInteractionRoundTripTest,
+	"UIJsonBridge.Full.InteractionMetadataRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUIJsonBridgeFullInteractionRoundTripTest::RunTest(const FString& Parameters)
+{
+	UWidgetBlueprint* SourceBlueprint = UIJsonBridge::Tests::CreateTransientWidgetBlueprint();
+	UWidgetBlueprint* TargetBlueprint = UIJsonBridge::Tests::CreateTransientWidgetBlueprint();
+	TestNotNull(TEXT("Source Widget Blueprint is created"), SourceBlueprint);
+	TestNotNull(TEXT("Target Widget Blueprint is created"), TargetBlueprint);
+	if (!SourceBlueprint || !TargetBlueprint)
+	{
+		return false;
+	}
+
+	FString JsonPath;
+	TestTrue(TEXT("Initial JSON file is written"), UIJsonBridge::Tests::WriteJsonFile(
+		UIJsonBridge::Tests::MakeMinimalJson(TEXT("TextBlock"), TEXT("/Script/UMG.TextBlock")),
+		JsonPath));
+
+	FText Error;
+	TestTrue(TEXT("Initial source import succeeds"), FUIJsonBridgeImporter::ImportWidgetBlueprint(SourceBlueprint, JsonPath, Error));
+
+	UEdGraph* FunctionGraph = FBlueprintEditorUtils::CreateNewGraph(
+		SourceBlueprint,
+		TEXT("DemoSignature"),
+		UEdGraph::StaticClass(),
+		UEdGraphSchema_K2::StaticClass());
+	FBlueprintEditorUtils::AddFunctionGraph<UFunction>(SourceBlueprint, FunctionGraph, true, nullptr);
+
+	TArray<UK2Node_FunctionEntry*> EntryNodes;
+	FunctionGraph->GetNodesOfClass(EntryNodes);
+	TestTrue(TEXT("Function entry exists"), EntryNodes.Num() > 0);
+	if (EntryNodes.Num() > 0)
+	{
+		FEdGraphPinType StringPinType;
+		StringPinType.PinCategory = UEdGraphSchema_K2::PC_String;
+		EntryNodes[0]->CreateUserDefinedPin(TEXT("InputText"), StringPinType, EGPD_Output, false);
+	}
+
+	FString FullPath = UIJsonBridge::Tests::MakeTempJsonPath(TEXT("FullInteractionExport"));
+	TestTrue(TEXT("Full export succeeds"), FUIJsonBridgeExporter::ExportWidgetBlueprint(SourceBlueprint, FullPath, EUIJsonBridgeExportProfile::Full, Error));
+
+	const TSharedPtr<FJsonObject> FullJson = UIJsonBridge::Tests::LoadJsonObject(FullPath);
+	TestTrue(TEXT("Full JSON loaded"), FullJson.IsValid());
+	if (FullJson.IsValid())
+	{
+		TestTrue(TEXT("Full JSON includes function signatures"), FullJson->HasField(TEXT("functionSignatures")));
+		TestTrue(TEXT("Full JSON includes blueprint variables"), FullJson->HasField(TEXT("blueprintVariables")));
+		const TSharedPtr<FJsonObject> GraphsJson = FullJson->GetObjectField(TEXT("graphs"));
+		TestTrue(TEXT("Full JSON includes graph metadata"), GraphsJson.IsValid());
+		if (GraphsJson.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* GraphItems = nullptr;
+			TestTrue(TEXT("Graph item array exists"), GraphsJson->TryGetArrayField(TEXT("items"), GraphItems) && GraphItems != nullptr);
+			bool bHasUbergraphClipboardText = false;
+			if (GraphItems)
+			{
+				for (const TSharedPtr<FJsonValue>& GraphValue : *GraphItems)
+				{
+					const TSharedPtr<FJsonObject> GraphJson = GraphValue.IsValid() ? GraphValue->AsObject() : nullptr;
+					FString Kind;
+					if (GraphJson.IsValid() && GraphJson->TryGetStringField(TEXT("kind"), Kind) && Kind == TEXT("ubergraph"))
+					{
+						bHasUbergraphClipboardText = GraphJson->HasField(TEXT("clipboardText"));
+						break;
+					}
+				}
+			}
+			TestTrue(TEXT("Ubergraph exports clipboard text field"), bHasUbergraphClipboardText);
+		}
+	}
+
+	Error = FText::GetEmpty();
+	TestTrue(TEXT("Full import succeeds"), FUIJsonBridgeImporter::ImportWidgetBlueprint(TargetBlueprint, FullPath, Error));
+	TestNotNull(TEXT("Imported text widget exists"), UIJsonBridge::Tests::FindWidgetByName(TargetBlueprint, TEXT("HorizontalBox_182")));
+
+	UEdGraph* ImportedFunction = nullptr;
+	for (UEdGraph* Graph : TargetBlueprint->FunctionGraphs)
+	{
+		if (Graph && Graph->GetFName() == TEXT("DemoSignature"))
+		{
+			ImportedFunction = Graph;
+			break;
+		}
+	}
+	TestNotNull(TEXT("Function signature graph is imported"), ImportedFunction);
+	if (ImportedFunction)
+	{
+		TArray<UK2Node_FunctionEntry*> ImportedEntries;
+		ImportedFunction->GetNodesOfClass(ImportedEntries);
+		TestTrue(TEXT("Imported function has entry node"), ImportedEntries.Num() > 0);
+		if (ImportedEntries.Num() > 0)
+		{
+			TestNotNull(TEXT("Imported function keeps input pin"), ImportedEntries[0]->FindPin(TEXT("InputText")));
+		}
+	}
+
+	IFileManager::Get().Delete(*JsonPath);
+	IFileManager::Get().Delete(*FullPath);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUIJsonBridgeImporterBlocksMismatchedEngineVersionTest,
+	"UIJsonBridge.Importer.BlocksMismatchedEngineVersion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUIJsonBridgeImporterBlocksMismatchedEngineVersionTest::RunTest(const FString& Parameters)
+{
+	UWidgetBlueprint* WidgetBlueprint = UIJsonBridge::Tests::CreateTransientWidgetBlueprint();
+	TestNotNull(TEXT("Transient Widget Blueprint is created"), WidgetBlueprint);
+	if (!WidgetBlueprint)
+	{
+		return false;
+	}
+
+	FString ValidJsonPath;
+	TestTrue(TEXT("Valid JSON file is written"), UIJsonBridge::Tests::WriteJsonFile(
+		UIJsonBridge::Tests::MakeMinimalJson(TEXT("HorizontalBox"), TEXT("/Script/UMG.HorizontalBox")),
+		ValidJsonPath));
+
+	FText Error;
+	TestTrue(TEXT("Initial import succeeds"), FUIJsonBridgeImporter::ImportWidgetBlueprint(WidgetBlueprint, ValidJsonPath, Error));
+	TestNotNull(TEXT("Initial widget exists"), UIJsonBridge::Tests::FindWidgetByName(WidgetBlueprint, TEXT("HorizontalBox_182")));
+
+	const FString MismatchedJson = TEXT(R"JSON(
+{
+  "schema": "ui-json-bridge.umg-widget-blueprint",
+  "schemaVersion": 1,
+  "profile": "full",
+  "importable": true,
+  "engineHint": "UE 5.5",
+  "rootWidget": {
+    "name": "CanvasPanel_165",
+    "class": "CanvasPanel",
+    "classPath": "/Script/UMG.CanvasPanel",
+    "properties": {},
+    "children": [
+      {
+        "name": "Should_Not_Import",
+        "class": "TextBlock",
+        "classPath": "/Script/UMG.TextBlock",
+        "properties": {},
+        "children": []
+      }
+    ]
+  }
+}
+)JSON");
+
+	FString MismatchedJsonPath;
+	TestTrue(TEXT("Mismatched JSON file is written"), UIJsonBridge::Tests::WriteJsonFile(MismatchedJson, MismatchedJsonPath));
+
+	Error = FText::GetEmpty();
+	TestFalse(TEXT("Mismatched engine import is blocked"), FUIJsonBridgeImporter::ImportWidgetBlueprint(WidgetBlueprint, MismatchedJsonPath, Error));
+	TestTrue(TEXT("Version mismatch error is reported"), Error.ToString().Contains(TEXT("current editor")));
+	TestNotNull(TEXT("Previous widget remains after blocked import"), UIJsonBridge::Tests::FindWidgetByName(WidgetBlueprint, TEXT("HorizontalBox_182")));
+	TestNull(TEXT("Mismatched JSON widget was not imported"), UIJsonBridge::Tests::FindWidgetByName(WidgetBlueprint, TEXT("Should_Not_Import")));
+
+	IFileManager::Get().Delete(*ValidJsonPath);
+	IFileManager::Get().Delete(*MismatchedJsonPath);
 	return true;
 }
 

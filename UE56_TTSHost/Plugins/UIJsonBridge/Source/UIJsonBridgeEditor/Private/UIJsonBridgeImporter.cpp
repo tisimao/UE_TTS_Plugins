@@ -11,12 +11,20 @@
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/Widget.h"
 #include "Containers/StringConv.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
+#include "EdGraphUtilities.h"
 #include "Fonts/CompositeFont.h"
 #include "Fonts/SlateFontInfo.h"
 #include "HAL/FileManager.h"
 #include "JsonObjectConverter.h"
+#include "K2Node_EditablePinBase.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/EngineVersion.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -66,6 +74,64 @@ namespace UIJsonBridge
 			return *ObjectJson;
 		}
 		return nullptr;
+	}
+
+	static bool TryParseEngineMajorMinor(const FString& EngineHint, int32& OutMajor, int32& OutMinor)
+	{
+		FString Normalized = EngineHint.TrimStartAndEnd();
+		Normalized.RemoveFromStart(TEXT("UE"));
+		Normalized.RemoveFromStart(TEXT("Unreal Engine"));
+		Normalized = Normalized.TrimStartAndEnd();
+
+		TArray<FString> Parts;
+		Normalized.ParseIntoArray(Parts, TEXT("."), true);
+		if (Parts.Num() < 2)
+		{
+			return false;
+		}
+
+		return LexTryParseString(OutMajor, *Parts[0]) && LexTryParseString(OutMinor, *Parts[1]);
+	}
+
+	static bool ValidateJsonCompatibility(const TSharedPtr<FJsonObject>& RootJson, FText& OutError)
+	{
+		double SchemaVersion = 1.0;
+		if (RootJson->TryGetNumberField(TEXT("schemaVersion"), SchemaVersion) && SchemaVersion > 1.0)
+		{
+			OutError = FText::Format(
+				LOCTEXT("UnsupportedSchemaVersion", "This UI JSON uses schemaVersion {0}, but this UIJsonBridge importer only supports schemaVersion 1."),
+				FText::AsNumber(SchemaVersion));
+			return false;
+		}
+
+		FString EngineHint;
+		if (!RootJson->TryGetStringField(TEXT("engineHint"), EngineHint) || EngineHint.IsEmpty())
+		{
+			return true;
+		}
+
+		int32 JsonMajor = 0;
+		int32 JsonMinor = 0;
+		if (!TryParseEngineMajorMinor(EngineHint, JsonMajor, JsonMinor))
+		{
+			OutError = FText::Format(
+				LOCTEXT("UnrecognizedEngineHint", "This UI JSON was exported with an unrecognized engineHint \"{0}\". Re-export it from this UE version before importing."),
+				FText::FromString(EngineHint));
+			return false;
+		}
+
+		const FEngineVersion& CurrentVersion = FEngineVersion::Current();
+		if (JsonMajor != static_cast<int32>(CurrentVersion.GetMajor()) || JsonMinor != static_cast<int32>(CurrentVersion.GetMinor()))
+		{
+			OutError = FText::Format(
+				LOCTEXT("EngineVersionMismatch", "This UI JSON was exported for {0}, but the current editor is UE {1}.{2}. Import is blocked to avoid incompatible Widget Blueprint graph data. Please re-export the JSON from the current UE version."),
+				FText::FromString(EngineHint),
+				FText::AsNumber(CurrentVersion.GetMajor()),
+				FText::AsNumber(CurrentVersion.GetMinor()));
+			return false;
+		}
+
+		return true;
 	}
 
 	static TMap<FName, FString> ReadPropertyMap(const TSharedPtr<FJsonObject>& Json)
@@ -664,6 +730,296 @@ namespace UIJsonBridge
 			}
 		}
 	}
+
+	static FEdGraphPinType ReadPinType(const TSharedPtr<FJsonObject>& PinTypeJson)
+	{
+		FEdGraphPinType PinType;
+		if (!PinTypeJson.IsValid())
+		{
+			return PinType;
+		}
+
+		FString Category;
+		if (PinTypeJson->TryGetStringField(TEXT("category"), Category))
+		{
+			PinType.PinCategory = FName(*Category);
+		}
+
+		FString SubCategory;
+		if (PinTypeJson->TryGetStringField(TEXT("subCategory"), SubCategory))
+		{
+			PinType.PinSubCategory = FName(*SubCategory);
+		}
+
+		FString SubCategoryObjectPath;
+		if (PinTypeJson->TryGetStringField(TEXT("subCategoryObject"), SubCategoryObjectPath) && !SubCategoryObjectPath.IsEmpty())
+		{
+			PinType.PinSubCategoryObject = FSoftObjectPath(SubCategoryObjectPath).TryLoad();
+		}
+
+		FString ContainerTypeName;
+		if (PinTypeJson->TryGetStringField(TEXT("containerType"), ContainerTypeName))
+		{
+			if (const UEnum* ContainerEnum = StaticEnum<EPinContainerType>())
+			{
+				const int64 ContainerValue = ContainerEnum->GetValueByNameString(ContainerTypeName);
+				if (ContainerValue != INDEX_NONE)
+				{
+					PinType.ContainerType = static_cast<EPinContainerType>(ContainerValue);
+				}
+			}
+		}
+
+		PinType.bIsReference = PinTypeJson->GetBoolField(TEXT("isReference"));
+		PinType.bIsConst = PinTypeJson->GetBoolField(TEXT("isConst"));
+		PinType.bIsWeakPointer = PinTypeJson->GetBoolField(TEXT("isWeakPointer"));
+		PinType.bIsUObjectWrapper = PinTypeJson->GetBoolField(TEXT("isUObjectWrapper"));
+		return PinType;
+	}
+
+	static void EnsureBlueprintVariables(UWidgetBlueprint* WidgetBlueprint, const TSharedPtr<FJsonObject>& VariablesJson)
+	{
+		if (!WidgetBlueprint || !VariablesJson.IsValid())
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+		if (!VariablesJson->TryGetArrayField(TEXT("items"), Items) || !Items)
+		{
+			return;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Item : *Items)
+		{
+			const TSharedPtr<FJsonObject> VariableJson = Item.IsValid() ? Item->AsObject() : nullptr;
+			if (!VariableJson.IsValid())
+			{
+				continue;
+			}
+
+			FString Name;
+			if (!VariableJson->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+			{
+				continue;
+			}
+
+			if (FBlueprintEditorUtils::FindNewVariableIndex(WidgetBlueprint, FName(*Name)) != INDEX_NONE)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject> TypeJson = GetOptionalObjectField(VariableJson, TEXT("type"));
+			const FEdGraphPinType PinType = ReadPinType(TypeJson);
+			FString DefaultValue;
+			VariableJson->TryGetStringField(TEXT("defaultValue"), DefaultValue);
+			FBlueprintEditorUtils::AddMemberVariable(WidgetBlueprint, FName(*Name), PinType, DefaultValue);
+		}
+	}
+
+	static UEdGraph* FindFunctionGraph(UWidgetBlueprint* WidgetBlueprint, const FName FunctionName)
+	{
+		if (!WidgetBlueprint)
+		{
+			return nullptr;
+		}
+
+		for (UEdGraph* Graph : WidgetBlueprint->FunctionGraphs)
+		{
+			if (Graph && Graph->GetFName() == FunctionName)
+			{
+				return Graph;
+			}
+		}
+		return nullptr;
+	}
+
+	static UK2Node_FunctionEntry* FindFunctionEntry(UEdGraph* Graph)
+	{
+		TArray<UK2Node_FunctionEntry*> Entries;
+		if (Graph)
+		{
+			Graph->GetNodesOfClass(Entries);
+		}
+		return Entries.Num() > 0 ? Entries[0] : nullptr;
+	}
+
+	static void EnsureFunctionPins(UK2Node_EditablePinBase* Node, const TArray<TSharedPtr<FJsonValue>>* Items, const EEdGraphPinDirection Direction)
+	{
+		if (!Node || !Items)
+		{
+			return;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Item : *Items)
+		{
+			const TSharedPtr<FJsonObject> PinJson = Item.IsValid() ? Item->AsObject() : nullptr;
+			if (!PinJson.IsValid())
+			{
+				continue;
+			}
+
+			FString Name;
+			if (!PinJson->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+			{
+				continue;
+			}
+
+			const FName PinName(*Name);
+			const bool bPinExists = Node->UserDefinedPins.ContainsByPredicate([PinName](const TSharedPtr<FUserPinInfo>& PinInfo)
+			{
+				return PinInfo.IsValid() && PinInfo->PinName == PinName;
+			});
+			if (bPinExists)
+			{
+				continue;
+			}
+
+			const FEdGraphPinType PinType = ReadPinType(GetOptionalObjectField(PinJson, TEXT("type")));
+			Node->CreateUserDefinedPin(PinName, PinType, Direction, false);
+		}
+	}
+
+	static void EnsureFunctionSignatures(UWidgetBlueprint* WidgetBlueprint, const TSharedPtr<FJsonObject>& SignaturesJson)
+	{
+		if (!WidgetBlueprint || !SignaturesJson.IsValid())
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+		if (!SignaturesJson->TryGetArrayField(TEXT("items"), Items) || !Items)
+		{
+			return;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Item : *Items)
+		{
+			const TSharedPtr<FJsonObject> FunctionJson = Item.IsValid() ? Item->AsObject() : nullptr;
+			if (!FunctionJson.IsValid())
+			{
+				continue;
+			}
+
+			FString Name;
+			if (!FunctionJson->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+			{
+				continue;
+			}
+
+			UEdGraph* FunctionGraph = FindFunctionGraph(WidgetBlueprint, FName(*Name));
+			if (!FunctionGraph)
+			{
+				FunctionGraph = FBlueprintEditorUtils::CreateNewGraph(
+					WidgetBlueprint,
+					FName(*Name),
+					UEdGraph::StaticClass(),
+					UEdGraphSchema_K2::StaticClass());
+				FBlueprintEditorUtils::AddFunctionGraph<UFunction>(WidgetBlueprint, FunctionGraph, true, nullptr);
+			}
+
+			UK2Node_FunctionEntry* EntryNode = FindFunctionEntry(FunctionGraph);
+			UK2Node_FunctionResult* ResultNode = EntryNode ? FBlueprintEditorUtils::FindOrCreateFunctionResultNode(EntryNode) : nullptr;
+
+			const TArray<TSharedPtr<FJsonValue>>* Inputs = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Outputs = nullptr;
+			FunctionJson->TryGetArrayField(TEXT("inputs"), Inputs);
+			FunctionJson->TryGetArrayField(TEXT("outputs"), Outputs);
+
+			EnsureFunctionPins(EntryNode, Inputs, EGPD_Output);
+			EnsureFunctionPins(ResultNode, Outputs, EGPD_Input);
+			if (EntryNode)
+			{
+				EntryNode->ReconstructNode();
+			}
+			if (ResultNode)
+			{
+				ResultNode->ReconstructNode();
+			}
+		}
+	}
+
+	static UEdGraph* GetOrCreateEventGraph(UWidgetBlueprint* WidgetBlueprint, const FString& PreferredName)
+	{
+		if (!WidgetBlueprint)
+		{
+			return nullptr;
+		}
+
+		for (UEdGraph* Graph : WidgetBlueprint->UbergraphPages)
+		{
+			if (Graph && (PreferredName.IsEmpty() || Graph->GetName() == PreferredName))
+			{
+				return Graph;
+			}
+		}
+		if (WidgetBlueprint->UbergraphPages.Num() > 0)
+		{
+			return WidgetBlueprint->UbergraphPages[0];
+		}
+
+		const FName GraphName = PreferredName.IsEmpty() ? UEdGraphSchema_K2::GN_EventGraph : FName(*PreferredName);
+		UEdGraph* EventGraph = FBlueprintEditorUtils::CreateNewGraph(
+			WidgetBlueprint,
+			GraphName,
+			UEdGraph::StaticClass(),
+			UEdGraphSchema_K2::StaticClass());
+		FBlueprintEditorUtils::AddUbergraphPage(WidgetBlueprint, EventGraph);
+		return EventGraph;
+	}
+
+	static void ReplaceEventGraphsFromJson(UWidgetBlueprint* WidgetBlueprint, const TSharedPtr<FJsonObject>& GraphsJson)
+	{
+		if (!WidgetBlueprint || !GraphsJson.IsValid())
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+		if (!GraphsJson->TryGetArrayField(TEXT("items"), Items) || !Items)
+		{
+			return;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Item : *Items)
+		{
+			const TSharedPtr<FJsonObject> GraphJson = Item.IsValid() ? Item->AsObject() : nullptr;
+			if (!GraphJson.IsValid())
+			{
+				continue;
+			}
+
+			FString Kind;
+			FString ClipboardText;
+			if (!GraphJson->TryGetStringField(TEXT("kind"), Kind) || Kind != TEXT("ubergraph") ||
+				!GraphJson->TryGetStringField(TEXT("clipboardText"), ClipboardText) || ClipboardText.IsEmpty())
+			{
+				continue;
+			}
+
+			FString Name;
+			GraphJson->TryGetStringField(TEXT("name"), Name);
+			UEdGraph* EventGraph = GetOrCreateEventGraph(WidgetBlueprint, Name);
+			if (!EventGraph || !FEdGraphUtilities::CanImportNodesFromText(EventGraph, ClipboardText))
+			{
+				continue;
+			}
+
+			TArray<UEdGraphNode*> ExistingNodes = EventGraph->Nodes;
+			for (UEdGraphNode* Node : ExistingNodes)
+			{
+				if (Node)
+				{
+					Node->Modify();
+					Node->DestroyNode();
+				}
+			}
+
+			TSet<UEdGraphNode*> ImportedNodes;
+			FEdGraphUtilities::ImportNodesFromText(EventGraph, ClipboardText, ImportedNodes);
+			FBlueprintEditorUtils::RefreshGraphNodes(EventGraph);
+		}
+	}
 }
 
 bool FUIJsonBridgeImporter::ImportWidgetBlueprint(UWidgetBlueprint* WidgetBlueprint, const FString& InputFilePath, FText& OutError)
@@ -696,6 +1052,11 @@ bool FUIJsonBridgeImporter::ImportWidgetBlueprint(UWidgetBlueprint* WidgetBluepr
 	if (!FJsonSerializer::Deserialize(Reader, RootJson) || !RootJson.IsValid())
 	{
 		OutError = LOCTEXT("ParseFailed", "Failed to parse UI JSON.");
+		return false;
+	}
+
+	if (!UIJsonBridge::ValidateJsonCompatibility(RootJson, OutError))
+	{
 		return false;
 	}
 
@@ -757,6 +1118,9 @@ bool FUIJsonBridgeImporter::ImportWidgetBlueprint(UWidgetBlueprint* WidgetBluepr
 
 	UIJsonBridge::RestoreExistingVariableFlags(WidgetBlueprint->WidgetTree, ExistingVariableWidgets);
 	UIJsonBridge::SynchronizeWidgetVariableGuids(WidgetBlueprint);
+	UIJsonBridge::EnsureBlueprintVariables(WidgetBlueprint, UIJsonBridge::GetOptionalObjectField(RootJson, TEXT("blueprintVariables")));
+	UIJsonBridge::EnsureFunctionSignatures(WidgetBlueprint, UIJsonBridge::GetOptionalObjectField(RootJson, TEXT("functionSignatures")));
+	UIJsonBridge::ReplaceEventGraphsFromJson(WidgetBlueprint, UIJsonBridge::GetOptionalObjectField(RootJson, TEXT("graphs")));
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
 	FKismetEditorUtilities::CompileBlueprint(WidgetBlueprint);
