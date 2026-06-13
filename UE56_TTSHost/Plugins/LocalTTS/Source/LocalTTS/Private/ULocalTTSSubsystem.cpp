@@ -313,6 +313,69 @@ void ULocalTTSSubsystem::PlaySpeech(
 	OnAudioReady();
 }
 
+void ULocalTTSSubsystem::PlayWavPath(
+	UObject* WorldContextObject,
+	const FString& WavPath,
+	TFunction<void(const FLocalTTSTTSResponse&)>&& OnAudioReady,
+	TFunction<void()>&& OnFinished,
+	TFunction<void(const FString&)>&& OnFailure)
+{
+	const FString NormalizedWavPath = WavPath.TrimStartAndEnd();
+	if (NormalizedWavPath.IsEmpty())
+	{
+		const FString ErrorMessage = TEXT("LocalTTS 播放失败：WAV 路径为空。");
+		UpdateTTSFailure(ErrorMessage, ELocalTTSErrorCode::WavFileInvalid);
+		OnFailure(ErrorMessage);
+		return;
+	}
+
+	FLocalTTSTTSResponse PlaybackResponse;
+	PlaybackResponse.bOk = true;
+	PlaybackResponse.RequestId = TEXT("external_wav");
+	PlaybackResponse.WavPath = NormalizedWavPath;
+
+	PlaySpeech(
+		WorldContextObject,
+		PlaybackResponse,
+		[OnAudioReady = MoveTemp(OnAudioReady), PlaybackResponse]() mutable
+		{
+			OnAudioReady(PlaybackResponse);
+		},
+		MoveTemp(OnFinished),
+		MoveTemp(OnFailure));
+}
+
+void ULocalTTSSubsystem::PlayLastSpeech(
+	UObject* WorldContextObject,
+	TFunction<void(const FLocalTTSTTSResponse&)>&& OnAudioReady,
+	TFunction<void()>&& OnFinished,
+	TFunction<void(const FString&)>&& OnFailure)
+{
+	FLocalTTSTTSResponse PlaybackResponse = LastTTSResponse;
+	if (PlaybackResponse.WavPath.TrimStartAndEnd().IsEmpty() && TTSResponseHistory.Num() > 0)
+	{
+		PlaybackResponse = TTSResponseHistory.Last();
+	}
+
+	if (PlaybackResponse.WavPath.TrimStartAndEnd().IsEmpty())
+	{
+		const FString ErrorMessage = TEXT("LocalTTS 播放失败：当前没有可播放的最近 WAV。请先生成一次语音。");
+		UpdateTTSFailure(ErrorMessage, ELocalTTSErrorCode::WavFileInvalid);
+		OnFailure(ErrorMessage);
+		return;
+	}
+
+	PlaySpeech(
+		WorldContextObject,
+		PlaybackResponse,
+		[OnAudioReady = MoveTemp(OnAudioReady), PlaybackResponse]() mutable
+		{
+			OnAudioReady(PlaybackResponse);
+		},
+		MoveTemp(OnFinished),
+		MoveTemp(OnFailure));
+}
+
 void ULocalTTSSubsystem::PlaySpeechAtActor(
 	UObject* WorldContextObject,
 	const FLocalTTSTTSResponse& TTSResponse,
@@ -447,6 +510,11 @@ FLocalTTSTTSResponse ULocalTTSSubsystem::GetLastTTSResponse() const
 	return LastTTSResponse;
 }
 
+TArray<FLocalTTSTTSResponse> ULocalTTSSubsystem::GetTTSResponseHistory() const
+{
+	return TTSResponseHistory;
+}
+
 FString ULocalTTSSubsystem::GetLastTTSError() const
 {
 	return LastTTSError;
@@ -480,6 +548,14 @@ void ULocalTTSSubsystem::UpdateHealthFailure(const FString& ErrorMessage, ELocal
 void ULocalTTSSubsystem::UpdateTTSState(const FLocalTTSTTSResponse& Response)
 {
 	LastTTSResponse = Response;
+	if (Response.bOk && !Response.WavPath.TrimStartAndEnd().IsEmpty())
+	{
+		TTSResponseHistory.Add(Response);
+		if (TTSResponseHistory.Num() > MaxTTSResponseHistory)
+		{
+			TTSResponseHistory.RemoveAt(0, TTSResponseHistory.Num() - MaxTTSResponseHistory);
+		}
+	}
 	LastTTSError.Reset();
 	LastTTSErrorCode = Response.bOk ? ELocalTTSErrorCode::None : ELocalTTSErrorCode::ServiceReturnedError;
 	ServiceState = Response.bOk

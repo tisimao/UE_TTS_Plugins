@@ -1,0 +1,6 @@
+interface:
+  display_name: "UE UMG JSON UI Builder"
+  short_description: "Build UMG JSON layouts safely."
+  default_prompt: "Use $ue-umg-json-ui-builder to refine a UMG JSON layout from a reference mockup while preserving Blueprint bindings."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LocalTTS Demo Tech UI Mockup</title>
+  <style>
+    :root {
+      --bg: #060914;
+      --panel: rgba(12, 19, 35, 0.86);
+      --panel-strong: rgba(15, 27, 49, 0.94);
+      --line: rgba(91, 232, 255, 0.34);
+      --line-soft: rgba(117, 139, 174, 0.26);
+      --text: #eef7ff;
+      --muted: #8ea7bd;
+      --cyan: #32d9ff;
+      --teal: #2fffc3;
+      --lime: #b7ff5a;
+      --violet: #8f6bff;
+      --pink: #ff4fc0;
+      --amber: #ffcb57;
+      --danger: #ff5f76;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    .stage {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      padding: 32px 48px 30px;
+      background:
+        radial-gradient(circle at 68% 34%, rgba(50, 217, 255, 0.14), transparent 26%),
+        radial-gradient(circle at 18% 80%, rgba(143, 107, 255, 0.16), transparent 25%),
+        linear-gradient(135deg, #050814 0%, #0a1223 42%, #07131c 100%);
+    }
+
+    .stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(91, 232, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91, 232, 255, 0.08) 1px, transparent 1px);
+      background-size: 38px 38px;
+      mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 88%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.03), transparent 12%, transparent 88%, rgba(255,255,255,0.03)),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.025), rgba(255,255,255,0.025) 1px, transparent 1px, transparent 4px);
+      mix-blend-mode: screen;
+      pointer-events: none;
+      opacity: 0.45;
+    }
+
+    .hud {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 104px 1fr 214px;
+      gap: 18px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr 450px 330px;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .brand,
+    .metric-strip,
+    .system-chip,
+    .panel {
+      border: 1px solid var(--line-soft);
+      background: linear-gradient(150deg, rgba(15, 28, 50, 0.92), rgba(8, 13, 26, 0.82));
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+        0 22px 70px rgba(0, 0, 0, 0.35),
+        0 0 34px rgba(50, 217, 255, 0.07);
+      backdrop-filter: blur(16px);
+    }
+
+    .brand {
+      position: relative;
+      padding: 18px 30px;
+      overflow: hidden;
+    }
+
+    .brand::before,
+    .panel::before {
+      content: "";
+      position: absolute;
+      top: -1px;
+      left: 24px;
+      width: 190px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--teal), transparent);
+      box-shadow: 0 0 18px rgba(50, 217, 255, 0.72);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--teal);
+      font-size: 18px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 20px var(--teal);
+    }
+
+    h1 {
+      margin: 9px 0 0;
+      font-size: 40px;
+      line-height: 1;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      padding: 10px;
+    }
+
+    .metric {
+      padding: 12px 16px;
+      background: rgba(5, 13, 25, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .metric label {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .metric span {
+      color: var(--teal);
+      font-size: 13px;
+    }
+
+    .system-chip {
+      padding: 16px 24px;
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .speaker-ring {
+      position: relative;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 1px solid rgba(50, 217, 255, 0.8);
+      box-shadow: inset 0 0 20px rgba(50, 217, 255, 0.16), 0 0 26px rgba(50, 217, 255, 0.22);
+    }
+
+    .speaker-ring::before,
+    .speaker-ring::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid rgba(47, 255, 195, 0.42);
+    }
+
+    .speaker-ring::before {
+      inset: 12px;
+    }
+
+    .speaker-ring::after {
+      inset: 25px;
+      background: var(--teal);
+      box-shadow: 0 0 18px var(--teal);
+    }
+
+    .system-chip b {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 7px;
+    }
+
+    .system-chip small {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 410px 1fr 510px;
+      gap: 18px;
+      min-height: 0;
+    }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      padding: 20px;
+    }
+
+    .panel-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .panel-title h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .tag {
+      padding: 6px 10px;
+      border: 1px solid rgba(47, 255, 195, 0.38);
+      color: var(--teal);
+      background: rgba(47, 255, 195, 0.08);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .service-card {
+      padding: 12px;
+      background: rgba(6, 13, 26, 0.58);
+      border: 1px solid rgba(50, 217, 255, 0.22);
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .row.between {
+      justify-content: space-between;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 18px;
+      border: 1px solid rgba(50, 217, 255, 0.5);
+      background: linear-gradient(135deg, rgba(50, 217, 255, 0.23), rgba(47, 255, 195, 0.11));
+      color: #f5fdff;
+      font-weight: 800;
+      font-size: 15px;
+      box-shadow: 0 0 22px rgba(50, 217, 255, 0.14);
+    }
+
+    .button.alt {
+      border-color: rgba(143, 107, 255, 0.55);
+      background: linear-gradient(135deg, rgba(143, 107, 255, 0.24), rgba(255, 79, 192, 0.1));
+    }
+
+    .button.stop {
+      border-color: rgba(255, 95, 118, 0.55);
+      background: linear-gradient(135deg, rgba(255, 95, 118, 0.2), rgba(255, 203, 87, 0.08));
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 16px;
+      color: var(--teal);
+      font-weight: 800;
+    }
+
+    .status::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      background: var(--teal);
+      box-shadow: 0 0 14px var(--teal);
+    }
+
+    .kv {
+      display: grid;
+      gap: 5px;
+      margin-top: 9px;
+    }
+
+    .kv div {
+      display: grid;
+      grid-template-columns: 108px 1fr;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .kv b {
+      color: #e8f8ff;
+      font-weight: 600;
+    }
+
+    .field-grid {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .input,
+    .select,
+    .textarea,
+    .slider {
+      min-height: 34px;
+      border: 1px solid rgba(117, 139, 174, 0.3);
+      background: rgba(2, 8, 18, 0.58);
+      color: #dff8ff;
+      padding: 7px 12px;
+      font-size: 14px;
+    }
+
+    .textarea {
+      min-height: 42px;
+      line-height: 1.5;
+      color: #cce2ef;
+    }
+
+    .slider {
+      position: relative;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .slider::before {
+      content: "";
+      position: absolute;
+      left: 12px;
+      right: 68px;
+      top: 50%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--teal) 0%, var(--cyan) 64%, rgba(255,255,255,0.1) 64%);
+      transform: translateY(-50%);
+      box-shadow: 0 0 12px rgba(50, 217, 255, 0.35);
+    }
+
+    .slider span {
+      position: relative;
+      z-index: 1;
+      margin-left: auto;
+      color: var(--teal);
+      font-weight: 800;
+    }
+
+    .center-panel {
+      display: grid;
+      grid-template-rows: auto 150px 1fr;
+      gap: 14px;
+    }
+
+    .hero-input {
+      display: grid;
+      grid-template-columns: 1fr 188px;
+      gap: 16px;
+    }
+
+    .big-text {
+      min-height: 142px;
+      padding: 16px;
+      border: 1px solid rgba(50, 217, 255, 0.26);
+      background:
+        linear-gradient(90deg, rgba(50, 217, 255, 0.04), rgba(143, 107, 255, 0.04)),
+        rgba(2, 8, 18, 0.64);
+      color: #d8eef8;
+      font-size: 19px;
+      line-height: 1.55;
+    }
+
+    .action-rail {
+      display: grid;
+      gap: 12px;
+    }
+
+    .wave-box {
+      position: relative;
+      min-height: 150px;
+      border: 1px solid rgba(50, 217, 255, 0.28);
+      background: rgba(3, 10, 20, 0.55);
+      overflow: hidden;
+    }
+
+    .wave-box::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(50, 217, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(50, 217, 255, 0.08) 1px, transparent 1px);
+      background-size: 26px 26px;
+      opacity: 0.78;
+    }
+
+    .wave {
+      position: absolute;
+      left: 28px;
+      right: 28px;
+      top: 50%;
+      height: 92px;
+      transform: translateY(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bar {
+      flex: 1;
+      height: var(--h);
+      min-width: 5px;
+      background: linear-gradient(180deg, var(--lime), var(--teal), var(--cyan));
+      box-shadow: 0 0 16px rgba(47, 255, 195, 0.38);
+    }
+
+    .wave-label {
+      position: absolute;
+      left: 26px;
+      top: 19px;
+      color: var(--cyan);
+      font-weight: 800;
+      font-size: 15px;
+    }
+
+    .wave-meta {
+      position: absolute;
+      right: 26px;
+      bottom: 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .mini-card {
+      min-height: 88px;
+      padding: 13px;
+      border: 1px solid rgba(117, 139, 174, 0.25);
+      background: rgba(4, 11, 22, 0.55);
+    }
+
+    .mini-card label {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    .mini-card strong {
+      font-size: 22px;
+      color: #f4fbff;
+    }
+
+    .mini-card code {
+      display: block;
+      color: var(--teal);
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .queue-panel {
+      display: grid;
+      grid-template-rows: auto 112px auto auto 1fr;
+      gap: 12px;
+    }
+
+    .queue-input {
+      min-height: 112px;
+      padding: 13px;
+      background: rgba(2, 8, 18, 0.6);
+      border: 1px solid rgba(143, 107, 255, 0.28);
+      color: #d8e9f2;
+      font-size: 16px;
+      line-height: 1.55;
+    }
+
+    .transport {
+      display: grid;
+      grid-template-columns: 1.15fr 1.15fr repeat(4, 0.8fr);
+      gap: 10px;
+    }
+
+    .transport .button {
+      min-height: 38px;
+      padding: 0 9px;
+      font-size: 14px;
+    }
+
+    .progress-wrap {
+      padding: 12px;
+      background: rgba(4, 11, 22, 0.56);
+      border: 1px solid rgba(50, 217, 255, 0.22);
+    }
+
+    .progress-head {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .progress {
+      height: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      width: 58%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--teal), var(--cyan), var(--violet));
+      box-shadow: 0 0 20px rgba(50, 217, 255, 0.55);
+    }
+
+    .segment-list {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .segment {
+      display: grid;
+      grid-template-columns: 42px 1fr 76px;
+      gap: 12px;
+      align-items: center;
+      padding: 9px 12px;
+      border: 1px solid rgba(117, 139, 174, 0.22);
+      background: rgba(5, 12, 24, 0.48);
+      color: #d9eef8;
+      font-size: 14px;
+    }
+
+    .segment.active {
+      border-color: rgba(47, 255, 195, 0.55);
+      background: linear-gradient(90deg, rgba(47, 255, 195, 0.14), rgba(50, 217, 255, 0.05));
+    }
+
+    .seg-index {
+      color: var(--cyan);
+      font-weight: 800;
+    }
+
+    .seg-state {
+      color: var(--teal);
+      font-size: 13px;
+      text-align: right;
+    }
+
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 520px;
+      gap: 18px;
+      min-height: 0;
+    }
+
+    .debug-log {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 14px;
+      line-height: 1.48;
+      color: #bfeaf7;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .log-block {
+      padding: 12px;
+      border: 1px solid rgba(117, 139, 174, 0.22);
+      background: rgba(2, 8, 18, 0.58);
+      overflow: hidden;
+    }
+
+    .log-line {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #c9dff0;
+    }
+
+    .log-line b {
+      color: var(--teal);
+      font-weight: 700;
+    }
+
+    .diagnostic {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .radar {
+      position: relative;
+      width: 136px;
+      height: 136px;
+      border: 1px solid rgba(47, 255, 195, 0.55);
+      border-radius: 50%;
+      background:
+        linear-gradient(90deg, transparent 49%, rgba(47,255,195,0.25) 50%, transparent 51%),
+        linear-gradient(0deg, transparent 49%, rgba(47,255,195,0.25) 50%, transparent 51%),
+        radial-gradient(circle, rgba(47,255,195,0.13), transparent 62%);
+      box-shadow: 0 0 28px rgba(47, 255, 195, 0.12), inset 0 0 28px rgba(47, 255, 195, 0.1);
+    }
+
+    .radar::before {
+      content: "";
+      position: absolute;
+      inset: 22px;
+      border-radius: 50%;
+      border: 1px solid rgba(47, 255, 195, 0.25);
+    }
+
+    .radar::after {
+      content: "";
+      position: absolute;
+      left: 74px;
+      top: 15px;
+      width: 2px;
+      height: 62px;
+      background: linear-gradient(var(--teal), transparent);
+      transform-origin: bottom;
+      transform: rotate(42deg);
+      box-shadow: 0 0 18px var(--teal);
+    }
+
+    .diag-lines {
+      display: grid;
+      gap: 11px;
+    }
+
+    .diag-line {
+      display: grid;
+      grid-template-columns: 128px 1fr;
+      gap: 12px;
+      font-size: 15px;
+    }
+
+    .diag-line span {
+      color: var(--muted);
+    }
+
+    .diag-line b {
+      color: #eefaff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .corner {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-color: rgba(50, 217, 255, 0.65);
+      border-style: solid;
+      pointer-events: none;
+    }
+
+    .corner.tl {
+      left: 18px;
+      top: 18px;
+      border-width: 2px 0 0 2px;
+    }
+
+    .corner.tr {
+      right: 18px;
+      top: 18px;
+      border-width: 2px 2px 0 0;
+    }
+
+    .corner.bl {
+      left: 18px;
+      bottom: 18px;
+      border-width: 0 0 2px 2px;
+    }
+
+    .corner.br {
+      right: 18px;
+      bottom: 18px;
+      border-width: 0 2px 2px 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <section class="hud">
+      <header class="topbar">
+        <div class="brand">
+          <div class="eyebrow"><span class="pulse-dot"></span>UE56_TTSHost / LocalTTS Demo</div>
+          <h1>WBP_LocalTTS_DemoPanel</h1>
+          <div class="subtitle">文本输入 · 语音生成 · 播放控制 · 长文本分段队列 · 状态回调监控</div>
+        </div>
+        <div class="metric-strip">
+          <div class="metric">
+            <label>Service</label>
+            <strong>READY</strong>
+            <span>/health 18ms</span>
+          </div>
+          <div class="metric">
+            <label>Queue</label>
+            <strong>03/05</strong>
+            <span>Playing segment</span>
+          </div>
+          <div class="metric">
+            <label>Voice</label>
+            <strong>design</strong>
+            <span>zh · speed 1.0</span>
+          </div>
+        </div>
+        <div class="system-chip">
+          <div class="speaker-ring"></div>
+          <div>
+            <b>TTS_Speaker</b>
+            <small>Actor position bound · spatial playback test target</small>
+          </div>
+        </div>
+      </header>
+
+      <section class="main-grid">
+        <aside class="panel stack">
+          <div class="panel-title">
+            <h2>服务与音色</h2>
+            <span class="tag">CONTROL</span>
+          </div>
+
+          <div class="service-card">
+            <div class="row between">
+              <div class="status">服务状态：已就绪</div>
+              <div class="row">
+                <span class="button">启动服务</span>
+                <span class="button alt">检查健康</span>
+              </div>
+            </div>
+            <div class="kv">
+              <div><span>服务详情</span><b>localhost:5005 · model loaded · GPU warm</b></div>
+              <div><span>请求入口</span><b>ALocalTTSDemoController</b></div>
+              <div><span>状态回调</span><b>Demo 状态已更新</b></div>
+            </div>
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label>Combo_VoiceMode</label>
+              <div class="select">design</div>
+            </div>
+            <div class="field">
+              <label>Input_Instruct</label>
+              <div class="input">female, young adult, chinese accent, moderate pitch</div>
+            </div>
+            <div class="row">
+              <div class="field" style="flex: 1;">
+                <label>Input_LanguageId</label>
+                <div class="input">zh</div>
+              </div>
+              <div class="field" style="width: 126px;">
+                <label>Spin_Speed</label>
+                <div class="slider"><span>1.0</span></div>
+              </div>
+            </div>
+            <div class="field">
+              <label>Input_ReferenceAudioPath</label>
+              <div class="input">clone 模式音频路径</div>
+            </div>
+            <div class="field">
+              <label>Input_ReferenceText</label>
+              <div class="textarea">clone 模式参考文本，当前 design 模式保持为空。</div>
+            </div>
+            <div class="row between">
+              <span class="button">应用音色配置</span>
+              <span class="status">音色配置已应用</span>
+            </div>
+          </div>
+        </aside>
+
+        <section class="panel center-panel">
+          <div class="panel-title">
+            <h2>单句语音生成</h2>
+            <span class="tag">SINGLE SPEECH</span>
+          </div>
+
+          <div class="hero-input">
+            <div class="big-text">欢迎进入 LocalTTS 演示关卡。请生成一段自然、清晰、带有轻微科技播报感的中文语音，用于验证单句生成、WAV 输出和播放链路。</div>
+            <div class="action-rail">
+              <span class="button">生成并播放</span>
+              <span class="button alt">仅生成 WAV</span>
+              <span class="button stop">停止播放</span>
+            </div>
+          </div>
+
+          <div class="wave-box">
+            <div class="wave-label">Realtime Speech Event · Synthesizing / Playing</div>
+            <div class="wave">
+              <i class="bar" style="--h: 28px"></i><i class="bar" style="--h: 66px"></i><i class="bar" style="--h: 42px"></i><i class="bar" style="--h: 96px"></i>
+              <i class="bar" style="--h: 74px"></i><i class="bar" style="--h: 112px"></i><i class="bar" style="--h: 50px"></i><i class="bar" style="--h: 84px"></i>
+              <i class="bar" style="--h: 36px"></i><i class="bar" style="--h: 106px"></i><i class="bar" style="--h: 68px"></i><i class="bar" style="--h: 44px"></i>
+              <i class="bar" style="--h: 92px"></i><i class="bar" style="--h: 118px"></i><i class="bar" style="--h: 58px"></i><i class="bar" style="--h: 34px"></i>
+              <i class="bar" style="--h: 88px"></i><i class="bar" style="--h: 64px"></i><i class="bar" style="--h: 100px"></i><i class="bar" style="--h: 46px"></i>
+              <i class="bar" style="--h: 70px"></i><i class="bar" style="--h: 30px"></i><i class="bar" style="--h: 108px"></i><i class="bar" style="--h: 76px"></i>
+              <i class="bar" style="--h: 52px"></i><i class="bar" style="--h: 94px"></i><i class="bar" style="--h: 40px"></i><i class="bar" style="--h: 82px"></i>
+            </div>
+            <div class="wave-meta">request_id: tts_20260612_183245_7f2a · 24kHz WAV</div>
+          </div>
+
+          <div class="result-grid">
+            <div class="mini-card">
+              <label>Txt_SingleState</label>
+              <strong>播放中</strong>
+            </div>
+            <div class="mini-card">
+              <label>Txt_SingleResult</label>
+              <code>D:/project/UETTSProject/Generated/TTS/last_single.wav</code>
+            </div>
+            <div class="mini-card">
+              <label>Last Speech Event</label>
+              <strong>AudioReady · Finished pending</strong>
+            </div>
+            <div class="mini-card">
+              <label>Playback Target</label>
+              <strong>TTS_Speaker · 3D Actor</strong>
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel queue-panel">
+          <div class="panel-title">
+            <h2>长文本队列</h2>
+            <span class="tag">SEGMENT QUEUE</span>
+          </div>
+
+          <div class="queue-input">第一段用于测试普通中文句号分段。第二段会继续生成新的语音，并观察 request_id 是否变化。
+这里故意换一行，用来测试换行是否会被优先作为分段边界。第三段内容稍微长一点，用于观察暂停、继续、跳到下一段和停止是否稳定。</div>
+
+          <div class="transport">
+            <span class="button">长文本播放</span>
+            <span class="button alt">长文本仅生成</span>
+            <span class="button">暂停</span>
+            <span class="button alt">继续</span>
+            <span class="button alt">下一段</span>
+            <span class="button stop">停止</span>
+          </div>
+
+          <div class="progress-wrap">
+            <div class="progress-head">
+              <span>Txt_LongState：Playing</span>
+              <span>Txt_LongProgress：3 / 5</span>
+            </div>
+            <div class="progress"><span></span></div>
+          </div>
+
+          <div class="segment-list">
+            <div class="segment">
+              <span class="seg-index">01</span>
+              <span>普通中文句号分段已完成，WAV 已生成。</span>
+              <span class="seg-state">Done</span>
+            </div>
+            <div class="segment">
+              <span class="seg-index">02</span>
+              <span>换行边界段落已完成，等待日志刷新。</span>
+              <span class="seg-state">Done</span>
+            </div>
+            <div class="segment active">
+              <span class="seg-index">03</span>
+              <span>当前段文本：观察暂停、继续、跳段与停止的稳定性。</span>
+              <span class="seg-state">Playing</span>
+            </div>
+            <div class="segment">
+              <span class="seg-index">04</span>
+              <span>下一段将在当前 AudioComponent 完成后进入。</span>
+              <span class="seg-state">Queued</span>
+            </div>
+            <div class="segment">
+              <span class="seg-index">05</span>
+              <span>最终状态用于验证队列完成回调。</span>
+              <span class="seg-state">Queued</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <footer class="bottom-grid">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>调试区 / 事件日志</h2>
+            <span class="tag">DEBUG MONITOR</span>
+          </div>
+          <div class="debug-log">
+            <div class="log-block">
+              <div class="log-line"><b>[18:32:40]</b> Btn_CheckHealth.OnClicked → Status ready, latency 18ms</div>
+              <div class="log-line"><b>[18:32:43]</b> Btn_ApplyVoiceConfig.OnClicked → design / zh / speed 1.0</div>
+              <div class="log-line"><b>[18:32:45]</b> Btn_SpeakSingle.OnClicked → Demo 单句生成并播放</div>
+              <div class="log-line"><b>[18:32:46]</b> SpeechEvent.AudioReady → last_single.wav</div>
+              <div class="log-line"><b>[18:32:48]</b> Queue.SegmentStarted → index 03, playback target TTS_Speaker</div>
+            </div>
+            <div class="log-block">
+              <div class="log-line">Txt_LastRequestId = tts_20260612_183245_7f2a</div>
+              <div class="log-line">Txt_LastWavPath = D:/project/UETTSProject/Generated/TTS/long_03.wav</div>
+              <div class="log-line">Txt_Error = 空</div>
+              <div class="log-line">LongTextQueue = Valid UObject, soft stop supported</div>
+              <div class="log-line">Widget 只调用公开蓝图节点，不写死业务逻辑</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel diagnostic">
+          <div class="radar"></div>
+          <div class="diag-lines">
+            <div class="panel-title" style="margin-bottom: 2px;">
+              <h2>蓝图接线状态</h2>
+              <span class="tag">LIVE</span>
+            </div>
+            <div class="diag-line"><span>Controller</span><b>BP_LocalTTS_DemoController : ALocalTTSDemoController</b></div>
+            <div class="diag-line"><span>Widget</span><b>WBP_LocalTTS_DemoPanel · AddToViewport</b></div>
+            <div class="diag-line"><span>Input Mode</span><b>Game and UI · Mouse Cursor Visible</b></div>
+            <div class="diag-line"><span>Callbacks</span><b>单句异步节点 + 长文本队列回调</b></div>
+            <div class="diag-line"><span>目标</span><b>轻量 Demo，可测试，可扩展到 3D Widget</b></div>
+          </div>
+        </section>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

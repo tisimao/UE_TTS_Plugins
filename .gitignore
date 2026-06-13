@@ -35,6 +35,8 @@ UE55_TTSHost/Plugins/LocalTTS/Binaries/
 UE55_TTSHost/Plugins/LocalTTS/Intermediate/
 UE56_TTSHost/Plugins/LocalTTS/Binaries/
 UE56_TTSHost/Plugins/LocalTTS/Intermediate/
+UE56_TTSHost/Plugins/UIJsonBridge/Binaries/
+UE56_TTSHost/Plugins/UIJsonBridge/Intermediate/
 
 # Service runtime folders
 Services/tts_service/cache/

@@ -218,7 +218,41 @@ End Object
 | `Txt_ServiceState` | TextBlock | 服务状态 |
 | `Txt_ServiceDetail` | TextBlock | 服务详情 |
 
-### 4.2 单句语音区
+### 4.2 音色配置区
+
+控件：
+
+| 控件名 | 类型 | 推荐默认值 |
+| --- | --- | --- |
+| `Combo_VoiceMode` | ComboBoxString | `design` |
+| `Input_Instruct` | EditableTextBox | `female, young adult, chinese accent, moderate pitch` |
+| `Input_LanguageId` | EditableTextBox | `zh` |
+| `Input_ReferenceAudioPath` | EditableTextBox | 空，仅 clone 模式使用 |
+| `Input_ReferenceText` | MultiLineEditableTextBox | 空，仅 clone 模式使用 |
+| `Spin_Speed` | SpinBox 或 Slider | `1.0` |
+| `Spin_Duration` | SpinBox 或 Slider | `0.0` |
+| `Btn_ApplyVoiceConfig` | Button | 应用音色配置 |
+| `Txt_VoiceConfigState` | TextBlock | 当前音色配置状态 |
+
+为什么测试 UI 需要这一块：
+
+- `auto` 模式会更容易出现随机音色，不适合做稳定验收。
+- `design` 模式配合固定 `Instruct` 可以把声音风格收窄到同一类角色。
+- 长文本和单句应该共用同一套音色配置，避免同一段测试里声音跳变。
+
+当前推荐先固定为：
+
+```text
+Mode = design
+LanguageId = zh
+Instruct = female, young adult, chinese accent, moderate pitch
+Speed = 1.0
+Duration = 0.0
+```
+
+注意：这里仍然不能保证每次采样完全相同，因为当前协议还没有 seed 字段。但它会比 `auto` 模式稳定得多。
+
+### 4.3 单句语音区
 
 控件：
 
@@ -231,7 +265,7 @@ End Object
 | `Txt_SingleState` | TextBlock | 单句状态 |
 | `Txt_SingleResult` | TextBlock | 单句结果 |
 
-### 4.3 长文本队列区
+### 4.4 长文本队列区
 
 控件：
 
@@ -248,7 +282,7 @@ End Object
 | `Txt_CurrentSegment` | TextBlock | 当前段文本 |
 | `Txt_LongProgress` | TextBlock | 当前进度 |
 
-### 4.4 调试区
+### 4.5 调试区
 
 控件：
 
@@ -419,7 +453,55 @@ Btn_StartService.OnClicked
 - 错误直接显示，方便测试安装路径、端口、Python 环境问题。
 - 通过 `DemoController` 调用后，相关状态字段和日志也会统一更新。
 
-### 7.2 检查健康按钮
+### 7.2 应用音色配置
+
+`Btn_ApplyVoiceConfig.OnClicked`：
+
+```text
+Btn_ApplyVoiceConfig.OnClicked
+-> Is Valid(DemoController)
+-> Branch
+   false:
+     -> Set Txt_Error = "DemoController 无效。"
+   true:
+     -> Combo_VoiceMode.GetSelectedOption
+     -> Input_LanguageId.GetText -> ToString
+     -> Input_Instruct.GetText -> ToString
+     -> Input_ReferenceAudioPath.GetText -> ToString
+     -> Input_ReferenceText.GetText -> ToString
+     -> Spin_Speed.GetValue
+     -> Spin_Duration.GetValue
+     -> DemoController.Demo 应用音色配置
+        Mode = Combo_VoiceMode
+        LanguageId = Input_LanguageId
+        Instruct = Input_Instruct
+        ReferenceAudioPath = Input_ReferenceAudioPath
+        ReferenceText = Input_ReferenceText
+        Speed = Spin_Speed
+        Duration = Spin_Duration
+        ErrorMessage = Local String
+     -> Branch(ReturnValue)
+        true:
+          -> Set Txt_Error = ""
+          -> Set Txt_VoiceConfigState = "音色配置已应用"
+          -> Call CE_RefreshFromDemoController
+        false:
+          -> Set Txt_Error = ErrorMessage
+```
+
+建议在 `Event Construct` 里也调用一次 `Demo 应用音色配置`，把 UI 默认值写入 `DemoController`。这样已有蓝图资产即使还保存着旧的 `auto` 模板，也会在 UI 构造时切到固定音色。
+
+`Combo_VoiceMode` 推荐选项：
+
+```text
+design
+auto
+clone
+```
+
+测试阶段建议优先使用 `design`，不要默认使用 `auto`。
+
+### 7.3 检查健康按钮
 
 `Btn_CheckHealth.OnClicked`：
 
@@ -551,7 +633,49 @@ Demo 状态已更新
 - 数字人和字幕更需要 `FLocalTTSSpeechEvent`，不只是 `FLocalTTSTTSResponse`。
 - 当前这些数据已经会被 `DemoController` 汇总到 `LastSpeechEvent`、`LastWavPath`、`LastRequestId`。
 
-### 8.3 停止播放
+### 8.3 新版播放入口
+
+后续调整 UI 时，建议把“生成”和“播放”拆开：
+
+```text
+Btn_GenerateSingle：仅生成 Local TTS
+Btn_PlayLastSingle：播放最新 Local TTS WAV
+Btn_PlaySelectedHistory：播放 Local TTS 响应
+Btn_StopSingle：停止 Local TTS 播放
+```
+
+`Btn_PlayLastSingle.OnClicked` 推荐接线：
+
+```text
+Btn_PlayLastSingle.OnClicked
+-> 播放最新 Local TTS WAV
+   WorldContextObject = self
+-> OnAudioReady:
+   -> Set Txt_SingleState = "播放中"
+   -> Set Txt_LastWavPath = Response.WavPath
+-> OnFinished:
+   -> Set Txt_SingleState = "播放完成"
+-> OnError:
+   -> Set Txt_Error = ErrorMessage
+```
+
+如果 UI 做历史列表，推荐流程：
+
+```text
+获取 Local TTS 语音历史
+-> For Each Response 创建一行
+-> 行按钮 OnClicked
+-> 播放 Local TTS 响应
+```
+
+为什么这样拆：
+
+- 生成 WAV 不会自动打断当前播放。
+- 重播最新声音不再请求 TTS 服务。
+- 播放旧声音只消费已有 WAV，不会触发生成 busy。
+- 长文本、字幕和数字人可以先拿到 `SpeechEvent`，需要播放时再调用播放节点。
+
+### 8.4 停止播放
 
 `Btn_StopSingle.OnClicked`：
 

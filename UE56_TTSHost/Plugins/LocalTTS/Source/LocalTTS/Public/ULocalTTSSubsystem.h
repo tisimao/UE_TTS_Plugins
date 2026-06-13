@@ -57,6 +57,19 @@ public:
 		TFunction<void()>&& OnFinished,
 		TFunction<void(const FString&)>&& OnFailure);
 
+	void PlayWavPath(
+		UObject* WorldContextObject,
+		const FString& WavPath,
+		TFunction<void(const FLocalTTSTTSResponse&)>&& OnAudioReady,
+		TFunction<void()>&& OnFinished,
+		TFunction<void(const FString&)>&& OnFailure);
+
+	void PlayLastSpeech(
+		UObject* WorldContextObject,
+		TFunction<void(const FLocalTTSTTSResponse&)>&& OnAudioReady,
+		TFunction<void()>&& OnFinished,
+		TFunction<void(const FString&)>&& OnFailure);
+
 	void PlaySpeechAtActor(
 		UObject* WorldContextObject,
 		const FLocalTTSTTSResponse& TTSResponse,
@@ -89,6 +102,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取最近语音响应", ToolTip = "读取最近一次 /tts 响应。成功时包含 request_id、wav 路径、采样率和生成耗时；默认是空响应。"))
 	FLocalTTSTTSResponse GetLastTTSResponse() const;
 
+	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取 Local TTS 语音历史", ToolTip = "读取最近生成成功的 TTS 响应列表，可用于播放旧 WAV。"))
+	TArray<FLocalTTSTTSResponse> GetTTSResponseHistory() const;
+
 	UFUNCTION(BlueprintPure, Category = "LocalTTS", meta = (DisplayName = "获取最近语音错误", ToolTip = "读取最近一次语音生成、WAV 加载或播放失败时的错误信息。默认为空。"))
 	FString GetLastTTSError() const;
 
@@ -112,6 +128,7 @@ private:
 
 	FLocalTTSHealthResponse LastHealthResponse;
 	FLocalTTSTTSResponse LastTTSResponse;
+	TArray<FLocalTTSTTSResponse> TTSResponseHistory;
 	FString LastHealthError;
 	FString LastTTSError;
 	ELocalTTSErrorCode LastHealthErrorCode = ELocalTTSErrorCode::None;
@@ -120,4 +137,5 @@ private:
 	bool bHasLastHealthResponse = false;
 	bool bIsServiceReady = false;
 	bool bIsTTSRequestInFlight = false;
+	static constexpr int32 MaxTTSResponseHistory = 20;
 };

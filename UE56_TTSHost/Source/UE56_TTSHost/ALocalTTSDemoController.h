@@ -123,6 +123,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "LocalTTS Demo|单句", meta = (DisplayName = "Demo 继续单句播放", ToolTip = "继续当前已暂停的 LocalTTS 音频。"))
 	bool ResumeSingle(FString& ErrorMessage);
 
+	UFUNCTION(BlueprintCallable, Category = "LocalTTS Demo|Voice", meta = (DisplayName = "Demo 应用音色配置", ToolTip = "把 UI 中选择的模式、音色标签、参考音频、语速和时长写入单句与长文本请求模板。后续生成会复用这套配置。"))
+	bool ApplyVoiceConfig(
+		const FString& Mode,
+		const FString& LanguageId,
+		const FString& Instruct,
+		const FString& ReferenceAudioPath,
+		const FString& ReferenceText,
+		float Speed,
+		float Duration,
+		FString& ErrorMessage);
+
 	UFUNCTION(BlueprintCallable, Category = "LocalTTS Demo|长文本", meta = (DisplayName = "Demo 创建或重置长文本队列", ToolTip = "创建一个新的长文本队列并绑定状态回调。后续 UI 按钮都操作这个队列实例。"))
 	ULocalTTSLongTextQueue* CreateOrResetLongTextQueue();
 

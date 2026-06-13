@@ -43,6 +43,9 @@ UE 侧会把 `Mode`、`LanguageId` 自动 trim 并转小写，所以蓝图里填
 | `Speak Local TTS At Actor Async` | `bAutoPlay` | `true` | 生成 wav 后自动播放。 |
 | `Speak Local TTS At Actor Async` | `bUseActorPlayback` | `true` | 使用指定 Actor 的位置进行 3D 播放。 |
 | `Generate Local TTS Async` | `bAutoPlay` | `false` | 只生成 wav，不自动播放，适合数字人链路。 |
+| `LocalTTS Demo Controller` | `SingleSpeakRequestTemplate.Mode` | `design` | Demo UI 推荐默认固定到 design，避免 auto 模式音色过于随机。 |
+| `LocalTTS Demo Controller` | `SingleSpeakRequestTemplate.Instruct` | `female, young adult, chinese accent, moderate pitch` | Demo UI 推荐默认音色标签。 |
+| `LocalTTS Demo Controller` | `LongTextRequestTemplate.SpeakRequestTemplate` | 同单句模板 | 长文本默认复用同一套音色配置，避免段落之间声音跳变。 |
 | `LocalTTS Example Actor` | `Text` | `你好，这是一次 UE 本地语音测试。` | 示例 Actor 默认朗读文本。 |
 | `LocalTTS Example Actor` | `Mode` | `auto` | 示例 Actor 默认模式。 |
 | `LocalTTS Example Actor` | `LanguageId` | `zh` | 示例 Actor 默认语言。 |
@@ -170,7 +173,7 @@ Duration = 0
 Text = 欢迎来到我们的虚拟展厅，我会为你介绍今天的内容。
 Mode = design
 LanguageId = zh
-Instruct = female, chinese accent
+Instruct = female, young adult, chinese accent, moderate pitch
 Speed = 1.0
 Duration = 0
 ```
@@ -197,8 +200,14 @@ american accent, australian accent, british accent, canadian accent, child, chin
 
 - 使用 `MakeDesignSpeakRequest` / `创建 Design 语音请求`。
 - `Instruct` 必填，否则 UE 会在发送前拦截。
-- 推荐先用 `female, chinese accent` 或 `女，青年，中音调` 测试。
+- 推荐先用 `female, young adult, chinese accent, moderate pitch` 测试。
 - 不要填写 `A warm, natural Chinese female voice.` 这类自然语言描述，OmniVoice 会报 unsupported instruct item。
+
+Demo UI 建议：
+
+- 在界面上提供一个“音色配置区”，统一配置 `Mode`、`Instruct`、`LanguageId`、`Speed`、`Duration`。
+- 点击“应用音色配置”后调用 `Demo 应用音色配置`，它会同时更新单句模板和长文本模板。
+- 测试时不要每次临时手填请求，先固定音色，再测试生成和播放链路。
 
 ## 8. clone 模式
 

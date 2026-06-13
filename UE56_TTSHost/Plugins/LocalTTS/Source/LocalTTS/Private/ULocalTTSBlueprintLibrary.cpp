@@ -297,6 +297,12 @@ FLocalTTSTTSResponse ULocalTTSBlueprintLibrary::GetLastLocalTTSSpeechResult(cons
 	return Subsystem ? Subsystem->GetLastTTSResponse() : FLocalTTSTTSResponse();
 }
 
+TArray<FLocalTTSTTSResponse> ULocalTTSBlueprintLibrary::GetLocalTTSSpeechHistory(const UObject* WorldContextObject)
+{
+	const ULocalTTSSubsystem* Subsystem = ResolveSubsystem(WorldContextObject);
+	return Subsystem ? Subsystem->GetTTSResponseHistory() : TArray<FLocalTTSTTSResponse>();
+}
+
 FString ULocalTTSBlueprintLibrary::GetLastLocalTTSWavPath(const UObject* WorldContextObject)
 {
 	const ULocalTTSSubsystem* Subsystem = ResolveSubsystem(WorldContextObject);

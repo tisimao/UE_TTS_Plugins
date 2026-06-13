@@ -302,6 +302,16 @@ public:
 		Category = "LocalTTS|Debug",
 		meta = (
 			WorldContext = "WorldContextObject",
+			DisplayName = "获取 Local TTS 语音历史",
+			ToolTip = "读取最近生成成功的 TTS 响应列表，可用于播放旧 WAV。"
+		))
+	static TArray<FLocalTTSTTSResponse> GetLocalTTSSpeechHistory(const UObject* WorldContextObject);
+
+	UFUNCTION(
+		BlueprintPure,
+		Category = "LocalTTS|Debug",
+		meta = (
+			WorldContext = "WorldContextObject",
 			DisplayName = "获取最近 Local TTS WAV 路径",
 			ToolTip = "读取最近一次成功语音请求生成的 WAV 路径。"
 		))

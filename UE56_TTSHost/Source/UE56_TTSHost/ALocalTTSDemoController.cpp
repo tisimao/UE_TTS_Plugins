@@ -48,8 +48,9 @@ ALocalTTSDemoController::ALocalTTSDemoController()
 	DefaultSingleText = TEXT("你好，这是 LocalTTS Demo 的单句语音测试。");
 	DefaultLongText = TEXT("这是 LocalTTS Demo 的长文本测试。第一段会先生成语音并播放。第二段用于验证暂停、继续和跳段按钮。第三段用于观察队列完成后的状态回调。");
 
-	SingleSpeakRequestTemplate.Mode = TEXT("auto");
+	SingleSpeakRequestTemplate.Mode = TEXT("design");
 	SingleSpeakRequestTemplate.LanguageId = TEXT("zh");
+	SingleSpeakRequestTemplate.Instruct = TEXT("female, young adult, chinese accent, moderate pitch");
 	SingleSpeakRequestTemplate.Speed = 1.0f;
 
 	LongTextRequestTemplate.SourceText = DefaultLongText;
@@ -227,6 +228,55 @@ bool ALocalTTSDemoController::ResumeSingle(FString& ErrorMessage)
 
 	ClearError();
 	AppendEventLog(TEXT("已继续单句播放。"));
+	BroadcastStateUpdated();
+	return true;
+}
+
+bool ALocalTTSDemoController::ApplyVoiceConfig(
+	const FString& Mode,
+	const FString& LanguageId,
+	const FString& Instruct,
+	const FString& ReferenceAudioPath,
+	const FString& ReferenceText,
+	const float Speed,
+	const float Duration,
+	FString& ErrorMessage)
+{
+	ErrorMessage.Reset();
+
+	FLocalTTSSpeakRequest NewTemplate = SingleSpeakRequestTemplate;
+	NewTemplate.Text = DefaultSingleText.IsEmpty() ? TEXT("LocalTTS voice config validation.") : DefaultSingleText;
+	NewTemplate.Mode = Mode.TrimStartAndEnd().IsEmpty() ? TEXT("design") : Mode.TrimStartAndEnd().ToLower();
+	NewTemplate.LanguageId = LanguageId.TrimStartAndEnd().IsEmpty() ? TEXT("zh") : LanguageId.TrimStartAndEnd().ToLower();
+	NewTemplate.ReferenceAudioPath = ReferenceAudioPath.TrimStartAndEnd();
+	NewTemplate.ReferenceText = ReferenceText.TrimStartAndEnd();
+	NewTemplate.Instruct = Instruct.TrimStartAndEnd();
+	NewTemplate.Speed = Speed <= 0.0f ? 1.0f : Speed;
+	NewTemplate.Duration = Duration < 0.0f ? 0.0f : Duration;
+
+	if (NewTemplate.Mode == TEXT("design") && NewTemplate.Instruct.IsEmpty())
+	{
+		NewTemplate.Instruct = TEXT("female, young adult, chinese accent, moderate pitch");
+	}
+
+	if (!ULocalTTSBlueprintLibrary::ValidateSpeakRequest(NewTemplate, ErrorMessage))
+	{
+		StoreError(ErrorMessage);
+		return false;
+	}
+
+	SingleSpeakRequestTemplate = NewTemplate;
+	SingleSpeakRequestTemplate.Text.Reset();
+	LongTextRequestTemplate.SpeakRequestTemplate = SingleSpeakRequestTemplate;
+
+	ClearError();
+	AppendEventLog(FString::Printf(
+		TEXT("音色配置已应用：Mode=%s，Language=%s，Instruct=%s，Speed=%.2f，Duration=%.2f。"),
+		*SingleSpeakRequestTemplate.Mode,
+		*SingleSpeakRequestTemplate.LanguageId,
+		*SingleSpeakRequestTemplate.Instruct,
+		SingleSpeakRequestTemplate.Speed,
+		SingleSpeakRequestTemplate.Duration));
 	BroadcastStateUpdated();
 	return true;
 }

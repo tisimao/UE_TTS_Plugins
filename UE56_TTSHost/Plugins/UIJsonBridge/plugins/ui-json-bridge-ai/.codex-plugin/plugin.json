@@ -1,0 +1,32 @@
+{
+  "name": "ui-json-bridge-ai",
+  "version": "0.1.0",
+  "description": "AI workflow skills for creating Unreal Engine UMG UI with UIJsonBridge JSON.",
+  "author": {
+    "name": "UETTsProject"
+  },
+  "keywords": [
+    "unreal",
+    "umg",
+    "ui-json-bridge",
+    "ue-ui",
+    "widget-blueprint"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "UIJsonBridge AI",
+    "shortDescription": "AI-assisted UE UMG JSON UI creation.",
+    "longDescription": "Adds Codex skills for designing, refining, and safely importing Unreal Engine UMG Widget Blueprint layouts through UIJsonBridge JSON, including Blueprint variable preservation, CJK font handling, parent-child UI composition, and SizeBox text constraints.",
+    "developerName": "UETTsProject",
+    "category": "Productivity",
+    "capabilities": [
+      "Write"
+    ],
+    "defaultPrompt": [
+      "制作 UE 的 UI，并保留蓝图变量名。",
+      "根据参考图修改 UMG JSON 布局。",
+      "为父 UI 引用子 UI 设计布局。"
+    ],
+    "brandColor": "#19D3FF"
+  }
+}
